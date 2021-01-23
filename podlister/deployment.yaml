@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: apiserver-test
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: podlister
+  namespace: apiserver-test
+  labels:
+    kubernetes.io/name: podlister
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: podlister
+  namespace: apiserver-test
+  labels:
+    kubernetes.io/name: podlister
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list", "get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: podlister
+  namespace: apiserver-test
+  labels:
+    kubernetes.io/name: podlister
+subjects:
+- apiGroup: ""
+  kind: ServiceAccount
+  name: podlister
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: podlister
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: podlister
+  namespace: apiserver-test
+  labels:
+    kubernetes.io/name: podlister
+spec:
+  selector:
+    matchLabels:
+      kubernetes.io/name: podlister
+  template:
+    metadata:
+      labels:
+        kubernetes.io/name: podlister
+    spec:
+      serviceAccountName: podlister
+      containers:
+      - name: podlister
+        image: gcr.io/ihcsim/podlister
+        imagePullPolicy: Always
+        command:
+        - /podlister
+        env:
+        - name: TARGET_NAMESPACE
+          value: demo
+        - name: CONTEXT_TIMEOUT
+          value: 10s
+        - name: TICK_INTERVAL
+          value: 100ms
+        resources:
+          requests:
+            cpu: 30m
+            memory: 50Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi

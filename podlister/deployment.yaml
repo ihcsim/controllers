@@ -63,10 +63,12 @@ spec:
         command:
         - /podlister
         env:
-        - name: TARGET_NAMESPACE
-          value: demo
         - name: CONTEXT_TIMEOUT
           value: 10s
+        - name: SHOW_ERRORS_ONLY
+          value: "true"
+        - name: TARGET_NAMESPACE
+          value: demo
         - name: TICK_INTERVAL
           value: 100ms
         resources:

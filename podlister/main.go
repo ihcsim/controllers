@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -51,8 +52,15 @@ func main() {
 		targetNamespace = v
 	}
 
-	log.Printf("target namespace: %s, tick interval: %s",
-		targetNamespace, tickInterval)
+	showErrorsOnly := true
+	if v, exists := os.LookupEnv("SHOW_ERRORS_ONLY"); exists {
+		if parsed, err := strconv.ParseBool(v); err == nil {
+			showErrorsOnly = parsed
+		}
+	}
+
+	log.Printf("target namespace: %s, tick interval: %s, show errors only: %t",
+		targetNamespace, tickInterval, showErrorsOnly)
 
 	var (
 		dataChan            = make(chan string)
@@ -77,13 +85,9 @@ func main() {
 
 			case <-time.Tick(tickInterval):
 				go func() {
-					var (
-						ctx    = mainCtx
-						cancel = mainCancel
-					)
-
+					ctx, cancel := context.WithCancel(mainCtx)
 					if contextTimeout > 0 {
-						log.Printf("context timeout: %s", contextTimeout)
+						log.Printf("set context timeout to %s", contextTimeout)
 						ctx, cancel = context.WithTimeout(mainCtx, contextTimeout)
 					}
 					defer cancel()
@@ -91,6 +95,10 @@ func main() {
 					pods, err := clientset.CoreV1().Pods(targetNamespace).List(ctx, listOpts)
 					if err != nil {
 						log.Printf("error while listing pods: %s", err)
+						return
+					}
+
+					if showErrorsOnly {
 						return
 					}
 

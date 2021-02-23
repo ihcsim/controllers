@@ -65,6 +65,14 @@ spec:
         env:
         - name: CONTEXT_TIMEOUT
           value: 10s
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         - name: SHOW_ERRORS_ONLY
           value: "true"
         - name: TARGET_NAMESPACE

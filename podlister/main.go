@@ -4,35 +4,25 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
 
 func main() {
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		log.Printf("can't get in-cluster config: %s", err)
-		os.Exit(1)
-	}
-
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		log.Printf("can't set up clientset: %s", err)
-		os.Exit(1)
-	}
-
 	var contextTimeout time.Duration
 	if v, exists := os.LookupEnv("CONTEXT_TIMEOUT"); exists {
 		parsed, err := time.ParseDuration(v)
 		if err != nil {
-			log.Printf("bad env var: %s", err)
-			os.Exit(1)
+			log.Fatalf("bad env var: %s", err)
 		}
 		contextTimeout = parsed
 	}
@@ -41,15 +31,24 @@ func main() {
 	if v, exists := os.LookupEnv("TICK_INTERVAL"); exists {
 		parsed, err := time.ParseDuration(v)
 		if err != nil {
-			log.Printf("bad env var: %s", err)
-			os.Exit(1)
+			log.Fatalf("bad env var: %s", err)
 		}
 		tickInterval = parsed
+	}
+
+	namespace := "demo"
+	if v, exists := os.LookupEnv("NAMESPACE"); exists {
+		namespace = v
 	}
 
 	targetNamespace := "demo"
 	if v, exists := os.LookupEnv("TARGET_NAMESPACE"); exists {
 		targetNamespace = v
+	}
+
+	pod := ""
+	if v, exists := os.LookupEnv("POD_NAME"); exists {
+		pod = v
 	}
 
 	showErrorsOnly := true
@@ -59,8 +58,8 @@ func main() {
 		}
 	}
 
-	log.Printf("target namespace: %s, tick interval: %s, show errors only: %t",
-		targetNamespace, tickInterval, showErrorsOnly)
+	log.Printf("namespace: %s, pod: %s, target namespace: %s, tick interval: %s, show errors only: %t",
+		namespace, pod, targetNamespace, tickInterval, showErrorsOnly)
 
 	var (
 		dataChan            = make(chan string)
@@ -71,6 +70,23 @@ func main() {
 	)
 
 	signal.Notify(exit, os.Interrupt, os.Kill)
+
+	clientset, err := clientSet()
+	if err != nil {
+		log.Fatalf("can't set up K8s clientset: %s", err)
+	}
+
+	requestCounter, err := registerCounter()
+	if err != nil {
+		log.Fatalf("fail to register Prometheus counter: %s", err)
+	}
+
+	server, err := startHTTPServer()
+	defer func() {
+		ctx, cancel := context.WithTimeout(mainCtx, time.Second*5)
+		defer cancel()
+		server.Shutdown(ctx)
+	}()
 
 	go func() {
 		for {
@@ -87,14 +103,20 @@ func main() {
 				go func() {
 					ctx, cancel := context.WithCancel(mainCtx)
 					if contextTimeout > 0 {
-						log.Printf("set context timeout to %s", contextTimeout)
 						ctx, cancel = context.WithTimeout(mainCtx, contextTimeout)
 					}
 					defer cancel()
 
+					requestLabels := prometheus.Labels{
+						"namespace":        namespace,
+						"pod":              pod,
+						"target_namespace": targetNamespace,
+					}
+					requestCounter.With(requestLabels).Inc()
+
 					pods, err := clientset.CoreV1().Pods(targetNamespace).List(ctx, listOpts)
 					if err != nil {
-						log.Printf("error while listing pods: %s", err)
+						errChan <- fmt.Errorf("error while listing pods: %s", err)
 						return
 					}
 
@@ -129,6 +151,46 @@ func main() {
 			break
 		}
 	}
+}
+
+func registerCounter() (*prometheus.CounterVec, error) {
+	counter := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "demo_http_requests_total",
+			Help: "A counter for requests issued by the demo controllers.",
+		},
+		[]string{"namespace", "target_namespace", "pod"},
+	)
+
+	if err := prometheus.Register(counter); err != nil {
+		return nil, err
+	}
+
+	return counter, nil
+}
+
+func clientSet() (*kubernetes.Clientset, error) {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	return kubernetes.NewForConfig(config)
+}
+
+func startHTTPServer() (*http.Server, error) {
+	server := &http.Server{Addr: ":8080"}
+	go func() {
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", promhttp.Handler())
+		server.Handler = mux
+
+		if err := server.ListenAndServe(); err != nil {
+			log.Println(err)
+		}
+	}()
+
+	return server, nil
 }
 
 type Result struct {

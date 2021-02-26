@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: apiserver-test
+  name: demo
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: podlister
-  namespace: apiserver-test
+  namespace: demo
   labels:
     kubernetes.io/name: podlister
 ---
@@ -15,7 +15,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: podlister
-  namespace: apiserver-test
+  namespace: demo
   labels:
     kubernetes.io/name: podlister
 rules:
@@ -27,7 +27,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: podlister
-  namespace: apiserver-test
+  namespace: demo
   labels:
     kubernetes.io/name: podlister
 subjects:
@@ -43,7 +43,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: podlister
-  namespace: apiserver-test
+  namespace: demo
   labels:
     kubernetes.io/name: podlister
 spec:
@@ -54,17 +54,21 @@ spec:
     metadata:
       labels:
         kubernetes.io/name: podlister
+        metrics.demo.io: enabled
     spec:
       serviceAccountName: podlister
       containers:
       - name: podlister
-        image: gcr.io/ihcsim/podlister
+        image: quay.io/isim/podlister
         imagePullPolicy: Always
         command:
         - /podlister
+        ports:
+        - name: metrics
+          containerPort: 8080
         env:
         - name: CONTEXT_TIMEOUT
-          value: 10s
+          value: 30s
         - name: NAMESPACE
           valueFrom:
             fieldRef:
@@ -78,7 +82,7 @@ spec:
         - name: TARGET_NAMESPACE
           value: demo
         - name: TICK_INTERVAL
-          value: 100ms
+          value: 300ms
         resources:
           requests:
             cpu: 30m

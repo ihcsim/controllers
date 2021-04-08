@@ -55,6 +55,10 @@ spec:
       labels:
         kubernetes.io/name: podlister
         metrics.demo.io: enabled
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8080"
     spec:
       serviceAccountName: podlister
       containers:

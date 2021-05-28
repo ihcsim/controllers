@@ -1,0 +1,21 @@
+apiVersion: app.example.com/v1alpha1
+kind: Database
+metadata:
+  name: pgsql
+  namespace: demo
+  labels:
+    kubernetes.io/app: pgsql
+spec:
+  image: postgres
+  replicas: 1
+  role: main
+  readOnly: false
+  env:
+  - name: POSTGRES_DB
+    value: default
+  - name: POSTGRES_USER
+    value: psql
+  - name: POSTGRES_PASSWORD_FILE
+    value: /etc/postgresql/passwd
+  - name: PGDATA
+    value: /var/lib/postgresql/data/pgdata

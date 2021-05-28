@@ -1,0 +1,19 @@
+apiVersion: app.example.com/v1alpha1
+kind: Database
+metadata:
+  name: mariadb
+  namespace: demo
+  labels:
+    kubernetes.io/app: mariadb
+spec:
+  image: postgres
+  replicas: 1
+  role: main
+  readOnly: false
+  env:
+  - name: MARIADB_DATABASE
+    value: default
+  - name: MARIADB_USER
+    value: mysql
+  - name: MARIADB_ROOT_PASSWORD_FILE
+    value: /etc/mariadb/passwd

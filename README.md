@@ -11,8 +11,17 @@ This repository contains some sample code related to Kubernetes controllers:
     [`unstructured.Unstructured` package](https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1/unstructured#Unstructured)
     to create and list custom resources.
 
-The `crd` examples use the
-[`envtest`](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/envtest)
+The `crd` examples depends on the:
+
+* [`code-generator`](https://github.com/kubernetes/code-generator) tool to
+  auto-generate the CRD clients, informers and helpers. To update these
+  auto-generated code, run:
+
+```sh
+make generate
+```
+
+* [`envtest`](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/envtest)
 package to set up a test environment with an API server and etcd. To extract
 the binaries, run:
 

@@ -2,29 +2,9 @@
 
 This repository contains some sample code related to Kubernetes controllers:
 
-* `podlister` - List all the pods in a target namespace at every
-  ['tick'](https://golang.org/pkg/time/#Ticker) interval. A Prometheus instance
-  is set up to scrape the total request count.
-* `crd` - Examples on working with CRDs
-  * `unstructured` - Sample code on how to use the
-    [`dynamic` client](https://pkg.go.dev/k8s.io/client-go/dynamic#Interface) and
-    [`unstructured.Unstructured` package](https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1/unstructured#Unstructured)
-    to create and list custom resources.
-
-The `crd` examples depends on the:
-
-* [`code-generator`](https://github.com/kubernetes/code-generator) tool to
-  auto-generate the CRD clients, informers and helpers. To update these
-  auto-generated code, run:
-
-```sh
-make generate
-```
-
-* [`envtest`](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/envtest)
-package to set up a test environment with an API server and etcd. To extract
-the binaries, run:
-
-```sh
-make testenv-bin
-```
+Package            | Description
+------------------ | --------------------
+ `podlister`       | List all the pods in a target namespace at every ['tick'](https://golang.org/pkg/time/#Ticker) interval. A Prometheus instance is set up to scrape the total request count
+`crd`              | Examples on working with CRDs
+`crd/unstructured` | Sample code on how to use the [`dynamic` client](https://pkg.go.dev/k8s.io/client-go/dynamic#Interface) and [`unstructured.Unstructured` package](https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1/unstructured#Unstructured) to create and list custom resources. It uses the [`envtest`](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/envtest) package to set up a test environment with an API server and etcd. To extract the binaries, run `make testenv-bin`
+`crd/typed`        | Sample code on how to use the [`code-generator`](https://github.com/kubernetes/code-generator) to auto-generate the CRD clients, informers and helpers. To update these auto-generated code, run `make generate`

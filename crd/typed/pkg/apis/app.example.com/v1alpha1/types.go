@@ -34,8 +34,11 @@ type DatabaseSpec struct {
 // DatabaseStatus represents the database object status as observed by the API
 // server.
 type DatabaseStatus struct {
-	// Phase represenets the state of the database.
+	// Phase represents the state of the database.
 	Phase string `json:"phase,omitempty"`
+
+	// Replicas represents the current number of replicas.
+	Replicas int `json:"replicas"`
 }
 
 // DatabaseList represents a list of database objects.

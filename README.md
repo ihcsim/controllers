@@ -1,6 +1,7 @@
 # controllers
 
-This repository contains some sample code related to Kubernetes controllers:
+This repository contains sample code related to Kubernetes controllers. They
+are shared as-is under the Apache License v2.0.
 
 Package            | Description
 ------------------ | --------------------

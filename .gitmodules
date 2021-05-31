@@ -1,3 +1,3 @@
-[submodule "vendor/k8s.io/code-generator"]
+[submodule "crd/typed/vendor/k8s.io/code-generator"]
 	path = crd/typed/vendor/k8s.io/code-generator
 	url = git@github.com:kubernetes/code-generator.git

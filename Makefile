@@ -8,4 +8,4 @@ generate:
 		-v 10
 
 testenv-bin:
-	tar xvfz crd/bin/envtest-bins.tar.gz -C crd/bin
+	tar xvfz crd/bin/envtest-bins.tar.gz -C crd/bin --strip-components 2

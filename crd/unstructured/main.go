@@ -26,10 +26,10 @@ import (
 )
 
 var (
-	homeDir        = os.Getenv("HOME")
 	binDir         = flag.String("bin-dir", "bin", "list of paths containing CRD YAML or JSON configs")
 	crdDir         = flag.String("crd-dir", filepath.Join("testdata", "crd"), "list of comma-separated paths containing CRD YAML or JSON configs (e.g., dir1,dir2,dir3")
-	resourceDir    = flag.String("resource-dir", filepath.Join("..", "testdata", "resources"), "list of comma-separated paths containing CRD YAML or JSON configs (e.g., dir1,dir2,dir3")
+	debug          = flag.Bool("debug", false, "set to true to view logs of API server and etcd")
+	resourceDir    = flag.String("resource-dir", filepath.Join("testdata", "resources"), "list of comma-separated paths containing CRD YAML or JSON configs (e.g., dir1,dir2,dir3")
 	requestTimeout = flag.Duration("request-timeout", time.Minute*2, "request timeout duration")
 )
 
@@ -43,16 +43,19 @@ func main() {
 
 	crdPaths := strings.Split(*crdDir, ",")
 	env := envtest.Environment{
-		CRDDirectoryPaths:        crdPaths,
-		BinaryAssetsDirectory:    *binDir,
-		AttachControlPlaneOutput: true,
-		ErrorIfCRDPathMissing:    true,
+		CRDDirectoryPaths:     crdPaths,
+		BinaryAssetsDirectory: *binDir,
+		ErrorIfCRDPathMissing: true,
 	}
 	defer func() {
 		if err := env.Stop(); err != nil {
 			log.Printf("error shutting down: %s", err)
 		}
 	}()
+
+	if *debug {
+		env.AttachControlPlaneOutput = true
+	}
 
 	// set up a test env with apiserver and etcd
 	restConfig, err := env.Start()
@@ -81,7 +84,7 @@ func main() {
 	}
 
 	for _, f := range resourceFiles {
-		if strings.HasSuffix(f.Name(), ".swp") {
+		if !strings.HasSuffix(f.Name(), ".yaml") && !strings.HasSuffix(f.Name(), ".yml") && !strings.HasSuffix(f.Name(), ".json") {
 			continue
 		}
 

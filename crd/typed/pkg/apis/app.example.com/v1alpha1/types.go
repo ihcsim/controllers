@@ -29,8 +29,6 @@ type DatabaseSpec struct {
 	Tolerations []corev1.Toleration
 }
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
 // DatabaseStatus represents the database object status as observed by the API
 // server.
 type DatabaseStatus struct {
@@ -40,6 +38,8 @@ type DatabaseStatus struct {
 	// Replicas represents the current number of replicas.
 	Replicas int `json:"replicas"`
 }
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // DatabaseList represents a list of database objects.
 type DatabaseList struct {

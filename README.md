@@ -6,7 +6,7 @@ are shared as-is under the Apache License v2.0.
 Package            | Description
 ------------------ | --------------------
  `podlister`       | List all the pods in a target namespace at every ['tick'](https://golang.org/pkg/time/#Ticker) interval. A Prometheus instance is set up to scrape the total request count
-`crd/dynamic` | Sample code on how to use the [`dynamic` client](https://pkg.go.dev/k8s.io/client-go/dynamic#Interface) and [`unstructured.Unstructured` package](https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1/unstructured#Unstructured) to create and list custom resources
+`crd/dynamic`      | Sample code on how to use the [`dynamic` client](https://pkg.go.dev/k8s.io/client-go/dynamic#Interface) and [`unstructured.Unstructured` package](https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1/unstructured#Unstructured) to create and list custom resources
 `crd/typed`        | Sample code on how to use the [`code-generator`](https://github.com/kubernetes/code-generator) to auto-generate the CRD clients, informers and helpers. To update these auto-generated code, run `make generate`
 
 The code in the `crd` package uses the

@@ -57,7 +57,7 @@ func (in *Database) DeepCopyObject() runtime.Object {
 func (in *DatabaseList) DeepCopyInto(out *DatabaseList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]Database, len(*in))

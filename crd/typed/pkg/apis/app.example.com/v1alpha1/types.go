@@ -43,7 +43,7 @@ type DatabaseStatus struct {
 
 // DatabaseList represents a list of database objects.
 type DatabaseList struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Items             []Database `json:"items"`
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []Database `json:"items"`
 }

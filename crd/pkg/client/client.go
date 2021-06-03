@@ -22,16 +22,16 @@ var (
 )
 
 // Init initializes all the clientsets using the provided rest config.
-func Init(restConfig *rest.Config) error {
+func Init(restConfig *rest.Config) (chan struct{}, error) {
 	var err error
 	Clientset, err = kubernetes.NewForConfig(restConfig)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	ClientsetCRD, err = versioned.NewForConfig(restConfig)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	stop := make(chan struct{})
@@ -49,5 +49,5 @@ func Init(restConfig *rest.Config) error {
 	sharedInformerFactory.Start(stop)
 	sharedInformerFactory.WaitForCacheSync(stop)
 
-	return nil
+	return stop, nil
 }

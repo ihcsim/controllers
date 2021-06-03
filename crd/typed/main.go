@@ -44,9 +44,13 @@ func main() {
 	}
 	defer envtest.Stop()
 
-	if err := client.Init(restConfig); err != nil {
+	stop, err := client.Init(restConfig)
+	if err != nil {
 		exitWithErr(err)
 	}
+	defer func() {
+		stop <- struct{}{}
+	}()
 
 	opts := metav1.CreateOptions{}
 	if err := createResources(*resourceDir, *requestTimeout, opts); err != nil {

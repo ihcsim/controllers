@@ -1,6 +1,7 @@
 package client
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/ihcsim/controllers/crd/typed/pkg/generated/clientset/versioned"
@@ -47,7 +48,13 @@ func Init(restConfig *rest.Config) (chan struct{}, error) {
 	)
 
 	sharedInformerFactory.Start(stop)
-	sharedInformerFactory.WaitForCacheSync(stop)
+	outcome := sharedInformerFactory.WaitForCacheSync(stop)
+
+	for kind, ok := range outcome {
+		if !ok {
+			return nil, fmt.Errorf("informer cache sync failed. kind: %v", kind)
+		}
+	}
 
 	return stop, nil
 }

@@ -1,30 +1,43 @@
-CODE_GENERATOR_FOLDER = ../vendor/k8s.io/code-generator/
+BASE_DIR = $(shell pwd)
+CODE_GENERATOR_FOLDER = $(BASE_DIR)/vendor/k8s.io/code-generator
 CODE_GENERATOR_SCRIPT = $(CODE_GENERATOR_FOLDER)/generate-groups.sh
 
 GO_PACKAGE_ROOT = github.com/ihcsim/controllers
 GO_PACKAGE_CRD_TYPED = $(GO_PACKAGE_ROOT)/crd/typed
 GO_PACKAGE_UPGRADE_KUBELET = $(GO_PACKAGE_ROOT)/upgrade/kubelet
 
-crd/typed/pkg/generated:
-	$(CODE_GENERATOR_SCRIPT) all \
-		$(GO_PACKAGE_CRD_TYPED)/pkg/generated \
-		$(GO_PACKAGE_CRD_TYPED)/pkg/apis \
-		app.example.com:v1alpha1 \
-		--go-header-file=$(CODE_GENERATOR_FOLDER)/hack/boilerplate.go.txt \
-		--output-base=$${GOPATH}/src \
-		-v 10
+GROUP_VERSION_UPGRADE_KUBELET = isim.dev:v1alpha1
+GROUP_VERSION_CRD_TYPED = app.example.com:v1alpha1
 
-upgrade/kubelet/pkg/generated: clean-gen
-	cd upgrade && $(CODE_GENERATOR_SCRIPT) all \
-		$(GO_PACKAGE_UPGRADE_KUBELET)/pkg/generated \
-		$(GO_PACKAGE_UPGRADE_KUBELET)/pkg/apis \
-		isim.dev:v1alpha1 \
-		--go-header-file=$(CODE_GENERATOR_FOLDER)/hack/boilerplate.go.txt \
-		--output-base=$${GOPATH}/src \
-		-v 10
+generate: clean-gen
+	for folder in upgrade/kubelet crd/typed; do \
+		if [ "$${folder}" == "upgrade/kubelet" ]; then \
+			go_package=$(GO_PACKAGE_UPGRADE_KUBELET) ;\
+			group_version=$(GROUP_VERSION_UPGRADE_KUBELET) ;\
+		else \
+			go_package=$(GO_PACKAGE_CRD_TYPED) ;\
+			group_version=$(GROUP_VERSION_CRD_TYPED) ;\
+		fi &&\
+		pushd $${folder} && \
+		$(CODE_GENERATOR_SCRIPT) all \
+			$${go_package}/pkg/generated \
+			$${go_package}/pkg/apis \
+			$${group_version} \
+			--go-header-file=$(CODE_GENERATOR_FOLDER)/hack/boilerplate.go.txt \
+			--output-base=$${GOPATH}/src \
+			-v 10 && \
+		popd ;\
+	done
 
 clean-gen:
-	rm -rf $(GO_PACKAGE_KUBELET)/pkg/generated
+	for folder in upgrade/kubelet crd/typed; do \
+		rm -rf $${folder}/pkg/generated && \
+		find $${folder}/pkg/apis -iname "zz_generated.deepcopy.go" | xargs rm ;\
+	done
+
+test:
+	cd upgrade && go test ./...
+	cd crd && go test ./...
 
 testenv-bin:
 	tar xvfz crd/bin/envtest-bins.tar.gz -C crd/bin --strip-components 2

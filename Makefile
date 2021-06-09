@@ -3,7 +3,7 @@ CODE_GENERATOR_SCRIPT = $(CODE_GENERATOR_FOLDER)/generate-groups.sh
 
 GO_PACKAGE_ROOT = github.com/ihcsim/controllers
 GO_PACKAGE_CRD_TYPED = $(GO_PACKAGE_ROOT)/crd/typed
-GO_PACKAGE_KUBELET_UPGRADE = $(GO_PACKAGE_ROOT)/kubelet-upgrade
+GO_PACKAGE_UPGRADE_KUBELET = $(GO_PACKAGE_ROOT)/upgrade/kubelet
 
 crd/typed/pkg/generated:
 	$(CODE_GENERATOR_SCRIPT) all \
@@ -14,10 +14,10 @@ crd/typed/pkg/generated:
 		--output-base=$${GOPATH}/src \
 		-v 10
 
-kubelet-upgrade/pkg/generated: clean-gen
-	cd kubelet-upgrade && $(CODE_GENERATOR_SCRIPT) all \
-		$(GO_PACKAGE_KUBELET_UPGRADE)/pkg/generated \
-		$(GO_PACKAGE_KUBELET_UPGRADE)/pkg/apis \
+upgrade/kubelet/pkg/generated: clean-gen
+	cd upgrade && $(CODE_GENERATOR_SCRIPT) all \
+		$(GO_PACKAGE_UPGRADE_KUBELET)/pkg/generated \
+		$(GO_PACKAGE_UPGRADE_KUBELET)/pkg/apis \
 		isim.dev:v1alpha1 \
 		--go-header-file=$(CODE_GENERATOR_FOLDER)/hack/boilerplate.go.txt \
 		--output-base=$${GOPATH}/src \

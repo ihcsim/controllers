@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	group "github.com/ihcsim/controllers/kubelet-upgrade/pkg/apis/isim.dev"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -24,7 +25,17 @@ var (
 )
 
 func addKnownTypes(scheme *runtime.Scheme) error {
-	scheme.AddKnownTypes(SchemeGroupVersion, &KubeletUpgradeConfig{}, &KubletUpgradeConfigList{})
+	scheme.AddKnownTypes(SchemeGroupVersion, &KubeletUpgradeConfig{}, &KubeletUpgradeConfigList{})
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil
+}
+
+// Kind takes an unqualified kind and returns back a qualified GroupKind.
+func Kind(kind string) schema.GroupKind {
+	return SchemeGroupVersion.WithKind(kind).GroupKind()
+}
+
+// Resource takes an unqualified resource and returns a qualified GroupResource.
+func Resource(resource string) schema.GroupResource {
+	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }

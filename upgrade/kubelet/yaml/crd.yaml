@@ -1,0 +1,59 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: KubeletUpgradeConfig
+spec:
+  names:
+    categories: all
+    kind: KubeletUpgradeConfig
+    listKind: KubeletUpgradeConfigList
+    plural: kubeletupgradeconfigs
+    shortnames: ["kc"]
+    singular: kubeletupgradeconfig
+  group: kubeletupgradeconfigs.clusterop.isim.dev
+  scope: Cluster
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+    additionalPrinterColumns:
+    - name: Kubelet version
+      description: The kubelet version of the last successful upgrade.
+      jsonPath: .status.kubeletVersion
+      type: string
+    - name: Last Upgrade Result
+      description: The aggregated results of the last upgrade. E.g., "upgrade completed successfully", "2/10 kubelets failed to upgrade"
+      jsonPath: .status.lastUpgradeResult
+      type: string
+    - name: Last Completed Time
+      description: The datetime when the last upgrade was completed
+      format: date-time
+      jsonPath: .status.lastCompletedTime
+      type: string
+    - name: Next Scheduled Time
+      description: The datetime of the next scheduled upgrade
+      format: date-time
+      jsonPath: .status.nextScheduledTime
+      type: string
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              failurePolicy:
+                type: string
+              maxUnavailable:
+                type: integer
+              schedule:
+                type: string
+              selector:
+                type: object
+                properties:
+                  matchLabels:
+                    type: string
+              strategy:
+                type: string

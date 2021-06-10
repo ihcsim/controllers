@@ -19,41 +19,33 @@ type KubeletUpgradeConfig struct {
 
 // KubeletUpgradeConfigSpec represents the spec of the upgrade process
 type KubeletUpgradeConfigSpec struct {
-	FailurePolicy  UpgradeFailurePolicy `json:"failurePolicy"`
-	Schedule       UpgradeSchedule      `json:"schedule"`
-	Selector       metav1.LabelSelector `json:"selector"`
-	Strategy       UpgradeStrategy      `json:"strategy"`
+	FailurePolicy  string               `json:"failurePolicy"`
 	MaxUnavailable int                  `json:"maxUnavailable"`
+	Schedule       string               `json:"schedule"`
+	Selector       metav1.LabelSelector `json:"selector"`
+	Strategy       string               `json:"strategy"`
 }
 
-// UpgradeSchedule defines the schedule in cron format.
-type UpgradeSchedule string
-
-// UpgradeStrategy defines the strategies to execute the upgrade i.e. node
-// replacement or inplace upgrade.
-type UpgradeStrategy int
-
 const (
-	UpgradeStrategyInplace UpgradeStrategy = iota
-	UpgradeStrategyReplace
-)
+	UpgradeStrategyRetain  = "retain"
+	UpgradeStrategyReplace = "replace"
 
-// UpgradeFailurePolicy defines the policy to deal with upgrade failures i.e.
-// terminate process or process to next node.
-type UpgradeFailurePolicy int
-
-const (
-	UpgradeFailurePolicyHalt UpgradeFailurePolicy = iota
-	UpgradeFailurePolicyIgnore
+	UpgradeFailurePolicyStrict = "strict"
+	UpgradeFailurePolicyIgnore = "ignore"
 )
 
 // KubeletUpgradeConfigStatus represents the status of the upgrade process.
 type KubeletUpgradeConfigStatus struct {
-	History []UpgradeHistory `json:"history"`
+	History           []UpgradeHistory `json:"history"`
+	KubeletVersion    string           `json:"kubeletVersion"`
+	LastCompletedTime *metav1.Time     `json:"lastCompletedTime"`
+	LastUpgradeResult string           `json:"lastUpgradeResult"`
+	NextScheduledTime *metav1.Time     `json:"nextScheduledTime"`
 }
 
 // UpgradeHistory shows the history of a kubelet upgrade.
 type UpgradeHistory struct {
+	KubeletVersion    string       `json:"kubeletVersion"`
 	LastScheduledTime *metav1.Time `json:"lastScheduledTime"`
 	LastCompletedTime *metav1.Time `json:"lastCompletedTime"`
 	Node              string       `json:"node"`

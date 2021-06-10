@@ -1,0 +1,12 @@
+apiVersion: clusterop.isim.dev
+kind: KubeletUpgradeConfig
+metadata:
+  name: replace-nodes-ignore
+spec:
+  failurePolicy: ignore
+  maxUnavailable: 1
+  schedule: "0 0 * * 0"
+  selector:
+    matchLabels:
+      clusterop.isim.dev/kubelet-upgrade: replace-nodes-ignore
+  strategy: replace

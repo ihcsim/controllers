@@ -112,6 +112,14 @@ func (in *KubeletUpgradeConfigStatus) DeepCopyInto(out *KubeletUpgradeConfigStat
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.LastCompletedTime != nil {
+		in, out := &in.LastCompletedTime, &out.LastCompletedTime
+		*out = (*in).DeepCopy()
+	}
+	if in.NextScheduledTime != nil {
+		in, out := &in.NextScheduledTime, &out.NextScheduledTime
+		*out = (*in).DeepCopy()
+	}
 	return
 }
 

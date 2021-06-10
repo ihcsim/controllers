@@ -1,7 +1,7 @@
 package v1alpha1
 
 import (
-	group "github.com/ihcsim/controllers/upgrade/kubelet/pkg/apis/isim.dev"
+	group "github.com/ihcsim/controllers/upgrade/kubelet/pkg/apis/clusterop.isim.dev"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"

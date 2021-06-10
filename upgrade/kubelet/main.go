@@ -5,9 +5,13 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/ihcsim/controllers/upgrade/kubelet/pkg/controller"
-	crdv1alpha1 "github.com/ihcsim/controllers/upgrade/kubelet/pkg/generated/clientset/versioned"
+	clusteropclientsetv1alpha1 "github.com/ihcsim/controllers/upgrade/kubelet/pkg/generated/clientset/versioned"
+	clusteropinformers "github.com/ihcsim/controllers/upgrade/kubelet/pkg/generated/informers/externalversions"
+
+	k8sinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
@@ -20,16 +24,23 @@ var (
 
 func main() {
 	parseFlags()
-	k8s, crd, err := clientsets()
+
+	clientsetsK8s, clientsetsCRD, err := clientsets()
 	if err != nil {
 		klog.Exit(err)
 	}
+	factoryK8s, factoryCRD := informers(clientsetsK8s, clientsetsCRD)
 
 	stop := handleSignal()
-	c := controller.New(k8s, crd)
+	c := controller.New(clientsetsK8s, clientsetsCRD, factoryK8s, factoryCRD)
+	factoryK8s.Start(stop)
+	factoryCRD.Start(stop)
+
+	klog.Info("starting controller")
 	if err := c.Sync(stop); err != nil {
 		klog.Errorf("controller sync failed: ", err)
 	}
+	klog.Info("exiting")
 }
 
 func handleSignal() chan struct{} {
@@ -41,13 +52,13 @@ func handleSignal() chan struct{} {
 	go func() {
 		s := <-kill
 		close(stop)
-		klog.Infof("stopping... received signal %s", s)
+		klog.Infof("shutting down due to signal %s", s)
 	}()
 
 	return stop
 }
 
-func clientsets() (kubernetes.Interface, crdv1alpha1.Interface, error) {
+func clientsets() (kubernetes.Interface, clusteropclientsetv1alpha1.Interface, error) {
 	k8sconfig, err := clientcmd.BuildConfigFromFlags(masterURL, kubeconfig)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to set up K8s config from flags: %w", err)
@@ -58,12 +69,18 @@ func clientsets() (kubernetes.Interface, crdv1alpha1.Interface, error) {
 		return nil, nil, fmt.Errorf("failed to initialize K8s clientsets: %w", err)
 	}
 
-	crd, err := crdv1alpha1.NewForConfig(k8sconfig)
+	crd, err := clusteropclientsetv1alpha1.NewForConfig(k8sconfig)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to initialize CRD clientsets: %w", err)
 	}
 
 	return k8s, crd, err
+}
+
+func informers(k8s kubernetes.Interface, crd clusteropclientsetv1alpha1.Interface) (k8sinformers.SharedInformerFactory, clusteropinformers.SharedInformerFactory) {
+	resyncDuration := time.Minute * 10
+	return k8sinformers.NewSharedInformerFactory(k8s, resyncDuration),
+		clusteropinformers.NewSharedInformerFactory(crd, resyncDuration)
 }
 
 func parseFlags() {

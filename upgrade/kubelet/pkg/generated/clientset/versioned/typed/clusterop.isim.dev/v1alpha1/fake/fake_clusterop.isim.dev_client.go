@@ -19,22 +19,22 @@ limitations under the License.
 package fake
 
 import (
-	v1alpha1 "github.com/ihcsim/controllers/upgrade/kubelet/pkg/generated/clientset/versioned/typed/isim.dev/v1alpha1"
+	v1alpha1 "github.com/ihcsim/controllers/upgrade/kubelet/pkg/generated/clientset/versioned/typed/clusterop.isim.dev/v1alpha1"
 	rest "k8s.io/client-go/rest"
 	testing "k8s.io/client-go/testing"
 )
 
-type FakeIsimV1alpha1 struct {
+type FakeClusteropV1alpha1 struct {
 	*testing.Fake
 }
 
-func (c *FakeIsimV1alpha1) KubeletUpgradeConfigs(namespace string) v1alpha1.KubeletUpgradeConfigInterface {
+func (c *FakeClusteropV1alpha1) KubeletUpgradeConfigs(namespace string) v1alpha1.KubeletUpgradeConfigInterface {
 	return &FakeKubeletUpgradeConfigs{c, namespace}
 }
 
 // RESTClient returns a RESTClient that is used to communicate
 // with API server by this client implementation.
-func (c *FakeIsimV1alpha1) RESTClient() rest.Interface {
+func (c *FakeClusteropV1alpha1) RESTClient() rest.Interface {
 	var ret *rest.RESTClient
 	return ret
 }

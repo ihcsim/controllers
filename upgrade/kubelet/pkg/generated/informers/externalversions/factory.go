@@ -24,8 +24,8 @@ import (
 	time "time"
 
 	versioned "github.com/ihcsim/controllers/upgrade/kubelet/pkg/generated/clientset/versioned"
+	clusteropisimdev "github.com/ihcsim/controllers/upgrade/kubelet/pkg/generated/informers/externalversions/clusterop.isim.dev"
 	internalinterfaces "github.com/ihcsim/controllers/upgrade/kubelet/pkg/generated/informers/externalversions/internalinterfaces"
-	isimdev "github.com/ihcsim/controllers/upgrade/kubelet/pkg/generated/informers/externalversions/isim.dev"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
@@ -172,9 +172,9 @@ type SharedInformerFactory interface {
 	ForResource(resource schema.GroupVersionResource) (GenericInformer, error)
 	WaitForCacheSync(stopCh <-chan struct{}) map[reflect.Type]bool
 
-	Isim() isimdev.Interface
+	Clusterop() clusteropisimdev.Interface
 }
 
-func (f *sharedInformerFactory) Isim() isimdev.Interface {
-	return isimdev.New(f, f.namespace, f.tweakListOptions)
+func (f *sharedInformerFactory) Clusterop() clusteropisimdev.Interface {
+	return clusteropisimdev.New(f, f.namespace, f.tweakListOptions)
 }

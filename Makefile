@@ -6,7 +6,7 @@ GO_PACKAGE_ROOT = github.com/ihcsim/controllers
 GO_PACKAGE_CRD_TYPED = $(GO_PACKAGE_ROOT)/crd/typed
 GO_PACKAGE_UPGRADE_KUBELET = $(GO_PACKAGE_ROOT)/upgrade/kubelet
 
-GROUP_VERSION_UPGRADE_KUBELET = isim.dev:v1alpha1
+GROUP_VERSION_UPGRADE_KUBELET = clusterop.isim.dev:v1alpha1
 GROUP_VERSION_CRD_TYPED = app.example.com:v1alpha1
 
 generate: clean-gen

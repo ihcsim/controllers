@@ -22,10 +22,10 @@ import (
 	"context"
 	time "time"
 
-	isimdevv1alpha1 "github.com/ihcsim/controllers/upgrade/kubelet/pkg/apis/isim.dev/v1alpha1"
+	clusteropisimdevv1alpha1 "github.com/ihcsim/controllers/upgrade/kubelet/pkg/apis/clusterop.isim.dev/v1alpha1"
 	versioned "github.com/ihcsim/controllers/upgrade/kubelet/pkg/generated/clientset/versioned"
 	internalinterfaces "github.com/ihcsim/controllers/upgrade/kubelet/pkg/generated/informers/externalversions/internalinterfaces"
-	v1alpha1 "github.com/ihcsim/controllers/upgrade/kubelet/pkg/generated/listers/isim.dev/v1alpha1"
+	v1alpha1 "github.com/ihcsim/controllers/upgrade/kubelet/pkg/generated/listers/clusterop.isim.dev/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -62,16 +62,16 @@ func NewFilteredKubeletUpgradeConfigInformer(client versioned.Interface, namespa
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.IsimV1alpha1().KubeletUpgradeConfigs(namespace).List(context.TODO(), options)
+				return client.ClusteropV1alpha1().KubeletUpgradeConfigs(namespace).List(context.TODO(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.IsimV1alpha1().KubeletUpgradeConfigs(namespace).Watch(context.TODO(), options)
+				return client.ClusteropV1alpha1().KubeletUpgradeConfigs(namespace).Watch(context.TODO(), options)
 			},
 		},
-		&isimdevv1alpha1.KubeletUpgradeConfig{},
+		&clusteropisimdevv1alpha1.KubeletUpgradeConfig{},
 		resyncPeriod,
 		indexers,
 	)
@@ -82,7 +82,7 @@ func (f *kubeletUpgradeConfigInformer) defaultInformer(client versioned.Interfac
 }
 
 func (f *kubeletUpgradeConfigInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&isimdevv1alpha1.KubeletUpgradeConfig{}, f.defaultInformer)
+	return f.factory.InformerFor(&clusteropisimdevv1alpha1.KubeletUpgradeConfig{}, f.defaultInformer)
 }
 
 func (f *kubeletUpgradeConfigInformer) Lister() v1alpha1.KubeletUpgradeConfigLister {

@@ -21,7 +21,7 @@ package externalversions
 import (
 	"fmt"
 
-	v1alpha1 "github.com/ihcsim/controllers/upgrade/kubelet/pkg/apis/isim.dev/v1alpha1"
+	v1alpha1 "github.com/ihcsim/controllers/upgrade/kubelet/pkg/apis/clusterop.isim.dev/v1alpha1"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
 )
@@ -52,9 +52,9 @@ func (f *genericInformer) Lister() cache.GenericLister {
 // TODO extend this to unknown resources with a client pool
 func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource) (GenericInformer, error) {
 	switch resource {
-	// Group=isim.dev, Version=v1alpha1
+	// Group=clusterop.isim.dev, Version=v1alpha1
 	case v1alpha1.SchemeGroupVersion.WithResource("kubeletupgradeconfigs"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.Isim().V1alpha1().KubeletUpgradeConfigs().Informer()}, nil
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Clusterop().V1alpha1().KubeletUpgradeConfigs().Informer()}, nil
 
 	}
 

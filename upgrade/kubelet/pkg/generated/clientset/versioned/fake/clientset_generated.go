@@ -20,8 +20,8 @@ package fake
 
 import (
 	clientset "github.com/ihcsim/controllers/upgrade/kubelet/pkg/generated/clientset/versioned"
-	isimv1alpha1 "github.com/ihcsim/controllers/upgrade/kubelet/pkg/generated/clientset/versioned/typed/isim.dev/v1alpha1"
-	fakeisimv1alpha1 "github.com/ihcsim/controllers/upgrade/kubelet/pkg/generated/clientset/versioned/typed/isim.dev/v1alpha1/fake"
+	clusteropv1alpha1 "github.com/ihcsim/controllers/upgrade/kubelet/pkg/generated/clientset/versioned/typed/clusterop.isim.dev/v1alpha1"
+	fakeclusteropv1alpha1 "github.com/ihcsim/controllers/upgrade/kubelet/pkg/generated/clientset/versioned/typed/clusterop.isim.dev/v1alpha1/fake"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"
@@ -76,7 +76,7 @@ func (c *Clientset) Tracker() testing.ObjectTracker {
 
 var _ clientset.Interface = &Clientset{}
 
-// IsimV1alpha1 retrieves the IsimV1alpha1Client
-func (c *Clientset) IsimV1alpha1() isimv1alpha1.IsimV1alpha1Interface {
-	return &fakeisimv1alpha1.FakeIsimV1alpha1{Fake: &c.Fake}
+// ClusteropV1alpha1 retrieves the ClusteropV1alpha1Client
+func (c *Clientset) ClusteropV1alpha1() clusteropv1alpha1.ClusteropV1alpha1Interface {
+	return &fakeclusteropv1alpha1.FakeClusteropV1alpha1{Fake: &c.Fake}
 }

@@ -21,7 +21,7 @@ package fake
 import (
 	"context"
 
-	v1alpha1 "github.com/ihcsim/controllers/upgrade/kubelet/pkg/apis/isim.dev/v1alpha1"
+	v1alpha1 "github.com/ihcsim/controllers/upgrade/kubelet/pkg/apis/clusterop.isim.dev/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
@@ -32,13 +32,13 @@ import (
 
 // FakeKubeletUpgradeConfigs implements KubeletUpgradeConfigInterface
 type FakeKubeletUpgradeConfigs struct {
-	Fake *FakeIsimV1alpha1
+	Fake *FakeClusteropV1alpha1
 	ns   string
 }
 
-var kubeletupgradeconfigsResource = schema.GroupVersionResource{Group: "isim.dev", Version: "v1alpha1", Resource: "kubeletupgradeconfigs"}
+var kubeletupgradeconfigsResource = schema.GroupVersionResource{Group: "clusterop.isim.dev", Version: "v1alpha1", Resource: "kubeletupgradeconfigs"}
 
-var kubeletupgradeconfigsKind = schema.GroupVersionKind{Group: "isim.dev", Version: "v1alpha1", Kind: "KubeletUpgradeConfig"}
+var kubeletupgradeconfigsKind = schema.GroupVersionKind{Group: "clusterop.isim.dev", Version: "v1alpha1", Kind: "KubeletUpgradeConfig"}
 
 // Get takes name of the kubeletUpgradeConfig, and returns the corresponding kubeletUpgradeConfig object, and an error if there is any.
 func (c *FakeKubeletUpgradeConfigs) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.KubeletUpgradeConfig, err error) {

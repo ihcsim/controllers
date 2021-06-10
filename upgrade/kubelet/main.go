@@ -38,9 +38,8 @@ func main() {
 
 	klog.Info("starting controller")
 	if err := c.Sync(stop); err != nil {
-		klog.Errorf("controller sync failed: ", err)
+		klog.Errorf("controller exited with errors: %s", err)
 	}
-	klog.Info("exiting")
 }
 
 func handleSignal() chan struct{} {
@@ -52,7 +51,7 @@ func handleSignal() chan struct{} {
 	go func() {
 		s := <-kill
 		close(stop)
-		klog.Infof("shutting down due to signal %s", s)
+		klog.Infof("shutting down: received signal %s", s)
 	}()
 
 	return stop

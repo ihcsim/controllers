@@ -60,7 +60,9 @@ func New(
 		scheme.Scheme,
 		corev1.EventSource{Component: name})
 
-	workqueue := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "kubeletUpgradeQueue")
+	workqueue := workqueue.NewNamedRateLimitingQueue(
+		workqueue.DefaultControllerRateLimiter(),
+		"kubeletUpgradeQueue")
 
 	c := &Controller{
 		clientsetsK8s:      clientsetsK8s,
@@ -93,14 +95,12 @@ func (c *Controller) Sync(stop <-chan struct{}) error {
 		c.workqueue.ShutDown()
 	}()
 
-	// Wait for the caches to be synced before starting workers
-	klog.Info("waiting for informer caches to sync")
-
 	var (
 		nodesSynced = c.k8sinformers.Core().V1().Nodes().Informer().HasSynced
 		podsSynced  = c.k8sinformers.Core().V1().Pods().Informer().HasSynced
 		crdSynced   = c.clusteropinformers.Clusterop().V1alpha1().KubeletUpgradeConfigs().Informer().HasSynced
 	)
+	klog.Info("waiting for informer caches to sync")
 	if ok := cache.WaitForCacheSync(stop, nodesSynced, podsSynced, crdSynced); !ok {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}

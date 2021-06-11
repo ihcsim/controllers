@@ -53,8 +53,8 @@ func (f *genericInformer) Lister() cache.GenericLister {
 func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource) (GenericInformer, error) {
 	switch resource {
 	// Group=clusterop.isim.dev, Version=v1alpha1
-	case v1alpha1.SchemeGroupVersion.WithResource("kubeletupgradeconfigs"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.Clusterop().V1alpha1().KubeletUpgradeConfigs().Informer()}, nil
+	case v1alpha1.SchemeGroupVersion.WithResource("kubeletupgrades"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Clusterop().V1alpha1().KubeletUpgrades().Informer()}, nil
 
 	}
 

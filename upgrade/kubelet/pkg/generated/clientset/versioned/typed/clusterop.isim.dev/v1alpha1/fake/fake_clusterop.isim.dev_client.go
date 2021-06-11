@@ -28,8 +28,8 @@ type FakeClusteropV1alpha1 struct {
 	*testing.Fake
 }
 
-func (c *FakeClusteropV1alpha1) KubeletUpgradeConfigs(namespace string) v1alpha1.KubeletUpgradeConfigInterface {
-	return &FakeKubeletUpgradeConfigs{c, namespace}
+func (c *FakeClusteropV1alpha1) KubeletUpgrades(namespace string) v1alpha1.KubeletUpgradeInterface {
+	return &FakeKubeletUpgrades{c, namespace}
 }
 
 // RESTClient returns a RESTClient that is used to communicate

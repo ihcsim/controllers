@@ -7,18 +7,18 @@ import (
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// KubeletUpgradeConfig defines configuration that manages the kubelet upgrade
+// KubeletUpgrade defines configuration that manages the kubelet upgrade
 // process.
-type KubeletUpgradeConfig struct {
+type KubeletUpgrade struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   KubeletUpgradeConfigSpec   `json:"spec"`
-	Status KubeletUpgradeConfigStatus `json:"status"`
+	Spec   KubeletUpgradeSpec   `json:"spec"`
+	Status KubeletUpgradeStatus `json:"status"`
 }
 
-// KubeletUpgradeConfigSpec represents the spec of the upgrade process
-type KubeletUpgradeConfigSpec struct {
+// KubeletUpgradeSpec represents the spec of the upgrade process
+type KubeletUpgradeSpec struct {
 	FailurePolicy  string               `json:"failurePolicy"`
 	MaxUnavailable int                  `json:"maxUnavailable"`
 	Schedule       string               `json:"schedule"`
@@ -34,8 +34,8 @@ const (
 	UpgradeFailurePolicyIgnore = "ignore"
 )
 
-// KubeletUpgradeConfigStatus represents the status of the upgrade process.
-type KubeletUpgradeConfigStatus struct {
+// KubeletUpgradeStatus represents the status of the upgrade process.
+type KubeletUpgradeStatus struct {
 	History           []UpgradeHistory `json:"history"`
 	KubeletVersion    string           `json:"kubeletVersion"`
 	LastCompletedTime *metav1.Time     `json:"lastCompletedTime"`
@@ -54,10 +54,10 @@ type UpgradeHistory struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// KubeletUpgradeConfigList represents a list of kubelet upgrade config
+// KubeletUpgradeList represents a list of kubelet upgrade config
 // objects.
-type KubeletUpgradeConfigList struct {
+type KubeletUpgradeList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []KubeletUpgradeConfig `json:"items"`
+	Items           []KubeletUpgrade `json:"items"`
 }

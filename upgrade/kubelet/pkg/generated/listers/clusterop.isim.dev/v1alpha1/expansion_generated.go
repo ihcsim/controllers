@@ -18,10 +18,10 @@ limitations under the License.
 
 package v1alpha1
 
-// KubeletUpgradeConfigListerExpansion allows custom methods to be added to
-// KubeletUpgradeConfigLister.
-type KubeletUpgradeConfigListerExpansion interface{}
+// KubeletUpgradeListerExpansion allows custom methods to be added to
+// KubeletUpgradeLister.
+type KubeletUpgradeListerExpansion interface{}
 
-// KubeletUpgradeConfigNamespaceListerExpansion allows custom methods to be added to
-// KubeletUpgradeConfigNamespaceLister.
-type KubeletUpgradeConfigNamespaceListerExpansion interface{}
+// KubeletUpgradeNamespaceListerExpansion allows custom methods to be added to
+// KubeletUpgradeNamespaceLister.
+type KubeletUpgradeNamespaceListerExpansion interface{}

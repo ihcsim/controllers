@@ -26,7 +26,7 @@ import (
 
 type ClusteropV1alpha1Interface interface {
 	RESTClient() rest.Interface
-	KubeletUpgradeConfigsGetter
+	KubeletUpgradesGetter
 }
 
 // ClusteropV1alpha1Client is used to interact with features provided by the clusterop.isim.dev group.
@@ -34,8 +34,8 @@ type ClusteropV1alpha1Client struct {
 	restClient rest.Interface
 }
 
-func (c *ClusteropV1alpha1Client) KubeletUpgradeConfigs(namespace string) KubeletUpgradeConfigInterface {
-	return newKubeletUpgradeConfigs(c, namespace)
+func (c *ClusteropV1alpha1Client) KubeletUpgrades(namespace string) KubeletUpgradeInterface {
+	return newKubeletUpgrades(c, namespace)
 }
 
 // NewForConfig creates a new ClusteropV1alpha1Client for the given config.

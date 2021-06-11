@@ -24,8 +24,8 @@ import (
 
 // Interface provides access to all the informers in this group version.
 type Interface interface {
-	// KubeletUpgradeConfigs returns a KubeletUpgradeConfigInformer.
-	KubeletUpgradeConfigs() KubeletUpgradeConfigInformer
+	// KubeletUpgrades returns a KubeletUpgradeInformer.
+	KubeletUpgrades() KubeletUpgradeInformer
 }
 
 type version struct {
@@ -39,7 +39,7 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
 }
 
-// KubeletUpgradeConfigs returns a KubeletUpgradeConfigInformer.
-func (v *version) KubeletUpgradeConfigs() KubeletUpgradeConfigInformer {
-	return &kubeletUpgradeConfigInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+// KubeletUpgrades returns a KubeletUpgradeInformer.
+func (v *version) KubeletUpgrades() KubeletUpgradeInformer {
+	return &kubeletUpgradeInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }

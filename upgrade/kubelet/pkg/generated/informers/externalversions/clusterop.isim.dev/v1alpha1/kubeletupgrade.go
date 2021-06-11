@@ -32,59 +32,59 @@ import (
 	cache "k8s.io/client-go/tools/cache"
 )
 
-// KubeletUpgradeConfigInformer provides access to a shared informer and lister for
-// KubeletUpgradeConfigs.
-type KubeletUpgradeConfigInformer interface {
+// KubeletUpgradeInformer provides access to a shared informer and lister for
+// KubeletUpgrades.
+type KubeletUpgradeInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1alpha1.KubeletUpgradeConfigLister
+	Lister() v1alpha1.KubeletUpgradeLister
 }
 
-type kubeletUpgradeConfigInformer struct {
+type kubeletUpgradeInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
 	tweakListOptions internalinterfaces.TweakListOptionsFunc
 	namespace        string
 }
 
-// NewKubeletUpgradeConfigInformer constructs a new informer for KubeletUpgradeConfig type.
+// NewKubeletUpgradeInformer constructs a new informer for KubeletUpgrade type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewKubeletUpgradeConfigInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
-	return NewFilteredKubeletUpgradeConfigInformer(client, namespace, resyncPeriod, indexers, nil)
+func NewKubeletUpgradeInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
+	return NewFilteredKubeletUpgradeInformer(client, namespace, resyncPeriod, indexers, nil)
 }
 
-// NewFilteredKubeletUpgradeConfigInformer constructs a new informer for KubeletUpgradeConfig type.
+// NewFilteredKubeletUpgradeInformer constructs a new informer for KubeletUpgrade type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewFilteredKubeletUpgradeConfigInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
+func NewFilteredKubeletUpgradeInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
 	return cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.ClusteropV1alpha1().KubeletUpgradeConfigs(namespace).List(context.TODO(), options)
+				return client.ClusteropV1alpha1().KubeletUpgrades(namespace).List(context.TODO(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.ClusteropV1alpha1().KubeletUpgradeConfigs(namespace).Watch(context.TODO(), options)
+				return client.ClusteropV1alpha1().KubeletUpgrades(namespace).Watch(context.TODO(), options)
 			},
 		},
-		&clusteropisimdevv1alpha1.KubeletUpgradeConfig{},
+		&clusteropisimdevv1alpha1.KubeletUpgrade{},
 		resyncPeriod,
 		indexers,
 	)
 }
 
-func (f *kubeletUpgradeConfigInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewFilteredKubeletUpgradeConfigInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
+func (f *kubeletUpgradeInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
+	return NewFilteredKubeletUpgradeInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
 }
 
-func (f *kubeletUpgradeConfigInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&clusteropisimdevv1alpha1.KubeletUpgradeConfig{}, f.defaultInformer)
+func (f *kubeletUpgradeInformer) Informer() cache.SharedIndexInformer {
+	return f.factory.InformerFor(&clusteropisimdevv1alpha1.KubeletUpgrade{}, f.defaultInformer)
 }
 
-func (f *kubeletUpgradeConfigInformer) Lister() v1alpha1.KubeletUpgradeConfigLister {
-	return v1alpha1.NewKubeletUpgradeConfigLister(f.Informer().GetIndexer())
+func (f *kubeletUpgradeInformer) Lister() v1alpha1.KubeletUpgradeLister {
+	return v1alpha1.NewKubeletUpgradeLister(f.Informer().GetIndexer())
 }

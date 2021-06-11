@@ -25,7 +25,7 @@ var (
 )
 
 func addKnownTypes(scheme *runtime.Scheme) error {
-	scheme.AddKnownTypes(SchemeGroupVersion, &KubeletUpgradeConfig{}, &KubeletUpgradeConfigList{})
+	scheme.AddKnownTypes(SchemeGroupVersion, &KubeletUpgrade{}, &KubeletUpgradeList{})
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil
 }

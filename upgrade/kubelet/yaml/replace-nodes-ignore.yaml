@@ -1,5 +1,5 @@
 apiVersion: clusterop.isim.dev
-kind: KubeletUpgradeConfig
+kind: KubeletUpgrade
 metadata:
   name: replace-nodes-ignore
 spec:

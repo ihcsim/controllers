@@ -24,8 +24,8 @@ generate: clean-gen
 			$${go_package}/pkg/apis \
 			$${group_version} \
 			--go-header-file=$(CODE_GENERATOR_FOLDER)/hack/boilerplate.go.txt \
-			--output-base=$${GOPATH}/src \
-			-v 10 && \
+			--output-base=$${GOPATH}/src && \
+			#-v 10 && \
 		popd ;\
 	done
 

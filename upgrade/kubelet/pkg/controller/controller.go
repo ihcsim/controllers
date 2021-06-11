@@ -74,7 +74,7 @@ func New(
 		recorder:           recorder,
 	}
 
-	clusteropinformers.Clusterop().V1alpha1().KubeletUpgradeConfigs().Informer().AddEventHandler(
+	clusteropinformers.Clusterop().V1alpha1().KubeletUpgrades().Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: c.enqueue,
 			UpdateFunc: func(oldobj, newobj interface{}) {
@@ -98,7 +98,7 @@ func (c *Controller) Sync(stop <-chan struct{}) error {
 	var (
 		nodesSynced = c.k8sinformers.Core().V1().Nodes().Informer().HasSynced
 		podsSynced  = c.k8sinformers.Core().V1().Pods().Informer().HasSynced
-		crdSynced   = c.clusteropinformers.Clusterop().V1alpha1().KubeletUpgradeConfigs().Informer().HasSynced
+		crdSynced   = c.clusteropinformers.Clusterop().V1alpha1().KubeletUpgrades().Informer().HasSynced
 	)
 	klog.Info("waiting for informer caches to sync")
 	if ok := cache.WaitForCacheSync(stop, nodesSynced, podsSynced, crdSynced); !ok {
@@ -107,7 +107,7 @@ func (c *Controller) Sync(stop <-chan struct{}) error {
 
 	klog.Info("starting workers")
 	for i := 0; i < 10; i++ {
-		go wait.Until(c.run, time.Second, stop)
+		go wait.Until(c.dequeue, time.Second, stop)
 	}
 
 	<-stop
@@ -122,7 +122,7 @@ func (c *Controller) enqueue(obj interface{}) {
 		return
 	}
 
-	if _, ok := obj.(*clusteropv1alpha1.KubeletUpgradeConfig); !ok {
+	if _, ok := obj.(*clusteropv1alpha1.KubeletUpgrade); !ok {
 		klog.Error("failed to enqueue obj %s. reason: wrong type", key)
 		return
 	}
@@ -130,4 +130,54 @@ func (c *Controller) enqueue(obj interface{}) {
 	c.workqueue.Add(key)
 }
 
-func (c *Controller) run() {}
+func (c *Controller) dequeue() {
+	obj, shutdown := c.workqueue.Get()
+	if shutdown {
+		return
+	}
+
+	var forget bool
+	defer func() {
+		c.workqueue.Done(obj)
+		if forget {
+			c.workqueue.Forget(obj)
+		}
+	}()
+
+	// obj is a string of the form namespace/name
+	key, ok := obj.(string)
+	if !ok {
+		// if obj is invalid, call Forget to avoid further unnecessary processing
+		forget = true
+		utilruntime.HandleError(fmt.Errorf("items in workqueue are expected to be of string type. but got %v (type %T)", obj, obj))
+		return
+	}
+
+	if err := c.syncHandler(key); err != nil {
+		// transient error, enqueue obj again
+		c.workqueue.AddRateLimited(key)
+		utilruntime.HandleError(fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error()))
+		return
+	}
+
+	forget = true
+	klog.Infof("successfully synced '%s'", key)
+}
+
+func (c *Controller) syncHandler(key string) error {
+	// Convert the namespace/name string into a distinct namespace and name
+	_, name, err := cache.SplitMetaNamespaceKey(key)
+	if err != nil {
+		return err
+	}
+
+	klog.Info("sync-ing obj: %s", name)
+	obj, err := c.clusteropinformers.Clusterop().V1alpha1().KubeletUpgrades().Lister().KubeletUpgrades("").Get(name)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("%+v\n", obj)
+
+	return nil
+}

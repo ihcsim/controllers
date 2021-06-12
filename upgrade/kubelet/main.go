@@ -25,19 +25,17 @@ var (
 func main() {
 	parseFlags()
 
-	clientsetsK8s, clientsetsCRD, err := clientsets()
+	k8sClientsets, clusteropClientsets, err := clientsets()
 	if err != nil {
 		klog.Exit(err)
 	}
-	factoryK8s, factoryCRD := informers(clientsetsK8s, clientsetsCRD)
+	k8sInformers, clusteropInformers := informers(k8sClientsets, clusteropClientsets)
 
 	stop := handleSignal()
-	c := controller.New(clientsetsK8s, clientsetsCRD, factoryK8s, factoryCRD)
-	factoryK8s.Start(stop)
-	factoryCRD.Start(stop)
+	c := controller.New(k8sClientsets, k8sInformers, clusteropClientsets, clusteropInformers)
 
 	klog.Info("starting controller")
-	if err := c.Sync(stop); err != nil {
+	if err := c.Run(stop); err != nil {
 		klog.Errorf("controller exited with errors: %s", err)
 	}
 }

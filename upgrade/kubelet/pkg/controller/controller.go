@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	clusteropv1alpha1 "github.com/ihcsim/controllers/upgrade/kubelet/pkg/apis/clusterop.isim.dev/v1alpha1"
@@ -11,7 +12,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
 	k8sinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -24,12 +24,14 @@ import (
 // Controller knows how to reconcile kubelet upgrades to match the in-cluster
 // states with the desired states.
 type Controller struct {
-	clientsetsK8s      kubernetes.Interface
-	clientsetsUpgrade  clusteropclientsetsv1alpha1.Interface
-	k8sInformers       k8sinformers.SharedInformerFactory
-	clusteropInformers clusteropinformers.SharedInformerFactory
+	k8sClientsets       kubernetes.Interface
+	k8sInformers        k8sinformers.SharedInformerFactory
+	clusteropClientsets clusteropclientsetsv1alpha1.Interface
+	clusteropInformers  clusteropinformers.SharedInformerFactory
 
-	name string
+	maxWorkersCount int
+	name            string
+	ticker          *time.Ticker
 
 	// recorder is an event recorder for recording Event resources to the
 	// Kubernetes API.
@@ -42,10 +44,10 @@ type Controller struct {
 
 // New returns a new instance of the controller.
 func New(
-	clientsetsK8s kubernetes.Interface,
-	clientsetsCRD clusteropclientsetsv1alpha1.Interface,
-	k8sinformers k8sinformers.SharedInformerFactory,
-	clusteropinformers clusteropinformers.SharedInformerFactory,
+	k8sClientsets kubernetes.Interface,
+	k8sInformers k8sinformers.SharedInformerFactory,
+	clusteropClientsets clusteropclientsetsv1alpha1.Interface,
+	clusteropInformers clusteropinformers.SharedInformerFactory,
 ) *Controller {
 
 	name := "kubelet-upgrade-controller"
@@ -54,7 +56,7 @@ func New(
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartStructuredLogging(0)
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{
-		Interface: clientsetsK8s.CoreV1().Events(""),
+		Interface: k8sClientsets.CoreV1().Events(""),
 	})
 	recorder := eventBroadcaster.NewRecorder(
 		scheme.Scheme,
@@ -65,103 +67,129 @@ func New(
 		"kubeletUpgradeQueue")
 
 	c := &Controller{
-		clientsetsK8s:      clientsetsK8s,
-		clientsetsUpgrade:  clientsetsCRD,
-		k8sInformers:       k8sinformers,
-		clusteropInformers: clusteropinformers,
-		name:               name,
-		workqueue:          workqueue,
-		recorder:           recorder,
+		k8sClientsets:       k8sClientsets,
+		k8sInformers:        k8sInformers,
+		clusteropClientsets: clusteropClientsets,
+		clusteropInformers:  clusteropInformers,
+		name:                name,
+		ticker:              time.NewTicker(time.Second),
+		workqueue:           workqueue,
+		recorder:            recorder,
 	}
 
-	clusteropinformers.Clusterop().V1alpha1().KubeletUpgrades().Informer().AddEventHandler(
-		cache.ResourceEventHandlerFuncs{
-			AddFunc: c.enqueue,
-			UpdateFunc: func(oldobj, newobj interface{}) {
-				c.enqueue(newobj)
-			},
-		},
+	k8sInformers.Core().V1().Nodes().Informer().AddEventHandler(
+		cache.ResourceEventHandlerFuncs{},
 	)
 
-	k8sinformers.Core().V1().Nodes().Informer().AddEventHandler(
+	clusteropInformers.Clusterop().V1alpha1().KubeletUpgrades().Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
-			AddFunc: c.enqueueNode,
-			UpdateFunc: func(oldobj, newobj interface{}) {
-				c.enqueueNode(newobj)
+			AddFunc: c.enqueue,
+			UpdateFunc: func(oldobj, newObj interface{}) {
+				c.enqueue(newObj)
 			},
+			DeleteFunc: c.purge,
 		},
 	)
 
 	return c
 }
 
-// Sync will set up the event handlers for our custom resources, as well as
+// Run will set up the event handlers for our custom resources, as well as
 // syncing informer caches and starting workers. It will block until stopCh is
 // closed, at which point it will shutdown the workqueue and wait for
-func (c *Controller) Sync(stop <-chan struct{}) error {
+func (c *Controller) Run(stop <-chan struct{}) error {
 	defer func() {
 		utilruntime.HandleCrash()
 		c.workqueue.ShutDown()
+		c.ticker.Stop()
 	}()
 
+	c.k8sInformers.Start(stop)
+	c.clusteropInformers.Start(stop)
+	if err := c.syncCache(stop); err != nil {
+		return err
+	}
+
 	var (
-		nodesSynced = c.k8sInformers.Core().V1().Nodes().Informer().HasSynced
-		podsSynced  = c.k8sInformers.Core().V1().Pods().Informer().HasSynced
-		crdSynced   = c.clusteropInformers.Clusterop().V1alpha1().KubeletUpgrades().Informer().HasSynced
+		currentWorkersCount = 0
+		waitGroup           = sync.WaitGroup{}
 	)
+
+LOOP:
+	for {
+		select {
+		case <-stop:
+			break LOOP
+
+		case <-c.ticker.C:
+			if currentWorkersCount <= c.maxWorkersCount {
+				waitGroup.Add(1)
+				currentWorkersCount++
+
+				go func() {
+					defer func() {
+						waitGroup.Done()
+						currentWorkersCount--
+					}()
+					c.dequeue(stop)
+				}()
+			}
+		}
+	}
+	waitGroup.Wait()
+	klog.Info("stopping controller")
+
+	return nil
+}
+
+func (c *Controller) syncCache(stop <-chan struct{}) error {
+	var (
+		nodesSynced   = c.k8sInformers.Core().V1().Nodes().Informer().HasSynced
+		upgradeSynced = c.clusteropInformers.Clusterop().V1alpha1().KubeletUpgrades().Informer().HasSynced
+	)
+
 	klog.Info("waiting for informer caches to sync")
-	if ok := cache.WaitForCacheSync(stop, nodesSynced, podsSynced, crdSynced); !ok {
+	if ok := cache.WaitForCacheSync(stop, nodesSynced, upgradeSynced); !ok {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
-
-	klog.Info("starting workers")
-	for i := 0; i < 10; i++ {
-		go wait.Until(c.dequeue, time.Second, stop)
-	}
-
-	<-stop
-	klog.Info("shutting down workers")
+	klog.Info("cache sync completed")
 	return nil
 }
 
 func (c *Controller) enqueue(obj interface{}) {
-}
-
-func (c *Controller) enqueueNode(obj interface{}) {
 	key, err := cache.MetaNamespaceKeyFunc(obj)
 	if err != nil {
 		utilruntime.HandleError(err)
 		return
 	}
 
-	if _, ok := obj.(*corev1.Node); !ok {
-		klog.Error("failed to enqueue obj %s. reason: wrong type", key)
+	if _, ok := obj.(*clusteropv1alpha1.KubeletUpgrade); !ok {
+		klog.Errorf("failed to enqueue obj %s. reason: wrong type", key)
 		return
 	}
 
 	c.workqueue.Add(key)
-
 }
 
-func (c *Controller) dequeue() {
+func (c *Controller) dequeue(stop <-chan struct{}) {
+	// shutdown queue when stop is closed
+	go func() {
+		<-stop
+		klog.Info("shutting down workqueue")
+		c.workqueue.ShutDown()
+	}()
+
 	obj, shutdown := c.workqueue.Get()
 	if shutdown {
 		return
 	}
-
-	var forget bool
-	defer func() {
-		c.workqueue.Done(obj)
-		if forget {
-			c.workqueue.Forget(obj)
-		}
-	}()
+	defer c.workqueue.Done(obj)
 
 	// obj is a string of the form namespace/name
 	key, ok := obj.(string)
 	if !ok {
 		// if obj is invalid, call Forget to avoid further unnecessary processing
-		forget = true
+		c.workqueue.Forget(obj)
 		utilruntime.HandleError(fmt.Errorf("items in workqueue are expected to be of string type. but got %v (type %T)", obj, obj))
 		return
 	}
@@ -172,25 +200,31 @@ func (c *Controller) dequeue() {
 		utilruntime.HandleError(fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error()))
 		return
 	}
+}
 
-	forget = true
-	klog.Infof("successfully synced '%s'", key)
+func (c *Controller) purge(obj interface{}) {
+	key, err := cache.MetaNamespaceKeyFunc(obj)
+	if err != nil {
+		utilruntime.HandleError(err)
+		return
+	}
+
+	c.workqueue.Forget(key)
 }
 
 func (c *Controller) syncHandler(key string) error {
-	// Convert the namespace/name string into a distinct namespace and name
+	// convert the namespace/name key into its distinct namespace and name
 	_, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
 		return err
 	}
 
-	klog.Info("sync-ing obj: %s", name)
-	obj, err := c.k8sInformers.Core().V1().Nodes().Lister().Get(name)
+	klog.Infof("checking upgrade obj: %s", name)
+	obj, err := c.clusteropInformers.Clusterop().V1alpha1().KubeletUpgrades().Lister().KubeletUpgrades("").Get(name)
 	if err != nil {
 		return err
 	}
 
 	fmt.Printf("%+v\n", obj)
-
 	return nil
 }

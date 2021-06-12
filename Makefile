@@ -1,3 +1,5 @@
+SHELL=/bin/bash
+
 BASE_DIR = $(shell pwd)
 CODE_GENERATOR_FOLDER = $(BASE_DIR)/vendor/k8s.io/code-generator
 CODE_GENERATOR_SCRIPT = $(CODE_GENERATOR_FOLDER)/generate-groups.sh
@@ -11,7 +13,7 @@ GROUP_VERSION_CRD_TYPED = app.example.com:v1alpha1
 
 generate: clean-gen
 	for folder in upgrade/kubelet crd/typed; do \
-		if [ "$${folder}" == "upgrade/kubelet" ]; then \
+		if [ "$${folder}" = "upgrade/kubelet" ]; then \
 			go_package=$(GO_PACKAGE_UPGRADE_KUBELET) ;\
 			group_version=$(GROUP_VERSION_UPGRADE_KUBELET) ;\
 		else \
@@ -25,7 +27,6 @@ generate: clean-gen
 			$${group_version} \
 			--go-header-file=$(CODE_GENERATOR_FOLDER)/hack/boilerplate.go.txt \
 			--output-base=$${GOPATH}/src && \
-			#-v 10 && \
 		popd ;\
 	done
 

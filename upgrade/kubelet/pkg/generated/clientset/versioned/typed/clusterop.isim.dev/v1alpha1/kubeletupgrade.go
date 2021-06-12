@@ -33,7 +33,7 @@ import (
 // KubeletUpgradesGetter has a method to return a KubeletUpgradeInterface.
 // A group's client should implement this interface.
 type KubeletUpgradesGetter interface {
-	KubeletUpgrades(namespace string) KubeletUpgradeInterface
+	KubeletUpgrades() KubeletUpgradeInterface
 }
 
 // KubeletUpgradeInterface has methods to work with KubeletUpgrade resources.
@@ -53,14 +53,12 @@ type KubeletUpgradeInterface interface {
 // kubeletUpgrades implements KubeletUpgradeInterface
 type kubeletUpgrades struct {
 	client rest.Interface
-	ns     string
 }
 
 // newKubeletUpgrades returns a KubeletUpgrades
-func newKubeletUpgrades(c *ClusteropV1alpha1Client, namespace string) *kubeletUpgrades {
+func newKubeletUpgrades(c *ClusteropV1alpha1Client) *kubeletUpgrades {
 	return &kubeletUpgrades{
 		client: c.RESTClient(),
-		ns:     namespace,
 	}
 }
 
@@ -68,7 +66,6 @@ func newKubeletUpgrades(c *ClusteropV1alpha1Client, namespace string) *kubeletUp
 func (c *kubeletUpgrades) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.KubeletUpgrade, err error) {
 	result = &v1alpha1.KubeletUpgrade{}
 	err = c.client.Get().
-		Namespace(c.ns).
 		Resource("kubeletupgrades").
 		Name(name).
 		VersionedParams(&options, scheme.ParameterCodec).
@@ -85,7 +82,6 @@ func (c *kubeletUpgrades) List(ctx context.Context, opts v1.ListOptions) (result
 	}
 	result = &v1alpha1.KubeletUpgradeList{}
 	err = c.client.Get().
-		Namespace(c.ns).
 		Resource("kubeletupgrades").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
@@ -102,7 +98,6 @@ func (c *kubeletUpgrades) Watch(ctx context.Context, opts v1.ListOptions) (watch
 	}
 	opts.Watch = true
 	return c.client.Get().
-		Namespace(c.ns).
 		Resource("kubeletupgrades").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
@@ -113,7 +108,6 @@ func (c *kubeletUpgrades) Watch(ctx context.Context, opts v1.ListOptions) (watch
 func (c *kubeletUpgrades) Create(ctx context.Context, kubeletUpgrade *v1alpha1.KubeletUpgrade, opts v1.CreateOptions) (result *v1alpha1.KubeletUpgrade, err error) {
 	result = &v1alpha1.KubeletUpgrade{}
 	err = c.client.Post().
-		Namespace(c.ns).
 		Resource("kubeletupgrades").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(kubeletUpgrade).
@@ -126,7 +120,6 @@ func (c *kubeletUpgrades) Create(ctx context.Context, kubeletUpgrade *v1alpha1.K
 func (c *kubeletUpgrades) Update(ctx context.Context, kubeletUpgrade *v1alpha1.KubeletUpgrade, opts v1.UpdateOptions) (result *v1alpha1.KubeletUpgrade, err error) {
 	result = &v1alpha1.KubeletUpgrade{}
 	err = c.client.Put().
-		Namespace(c.ns).
 		Resource("kubeletupgrades").
 		Name(kubeletUpgrade.Name).
 		VersionedParams(&opts, scheme.ParameterCodec).
@@ -141,7 +134,6 @@ func (c *kubeletUpgrades) Update(ctx context.Context, kubeletUpgrade *v1alpha1.K
 func (c *kubeletUpgrades) UpdateStatus(ctx context.Context, kubeletUpgrade *v1alpha1.KubeletUpgrade, opts v1.UpdateOptions) (result *v1alpha1.KubeletUpgrade, err error) {
 	result = &v1alpha1.KubeletUpgrade{}
 	err = c.client.Put().
-		Namespace(c.ns).
 		Resource("kubeletupgrades").
 		Name(kubeletUpgrade.Name).
 		SubResource("status").
@@ -155,7 +147,6 @@ func (c *kubeletUpgrades) UpdateStatus(ctx context.Context, kubeletUpgrade *v1al
 // Delete takes name of the kubeletUpgrade and deletes it. Returns an error if one occurs.
 func (c *kubeletUpgrades) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	return c.client.Delete().
-		Namespace(c.ns).
 		Resource("kubeletupgrades").
 		Name(name).
 		Body(&opts).
@@ -170,7 +161,6 @@ func (c *kubeletUpgrades) DeleteCollection(ctx context.Context, opts v1.DeleteOp
 		timeout = time.Duration(*listOpts.TimeoutSeconds) * time.Second
 	}
 	return c.client.Delete().
-		Namespace(c.ns).
 		Resource("kubeletupgrades").
 		VersionedParams(&listOpts, scheme.ParameterCodec).
 		Timeout(timeout).
@@ -183,7 +173,6 @@ func (c *kubeletUpgrades) DeleteCollection(ctx context.Context, opts v1.DeleteOp
 func (c *kubeletUpgrades) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.KubeletUpgrade, err error) {
 	result = &v1alpha1.KubeletUpgrade{}
 	err = c.client.Patch(pt).
-		Namespace(c.ns).
 		Resource("kubeletupgrades").
 		Name(name).
 		SubResource(subresources...).

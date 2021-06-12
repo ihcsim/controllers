@@ -219,8 +219,8 @@ func (c *Controller) syncHandler(key string) error {
 		return err
 	}
 
-	klog.Infof("checking upgrade obj: %s", name)
-	obj, err := c.clusteropInformers.Clusterop().V1alpha1().KubeletUpgrades().Lister().KubeletUpgrades("").Get(name)
+	klog.Infof("retrieving KubeletUpgrade obj: %s", name)
+	obj, err := c.clusteropInformers.Clusterop().V1alpha1().KubeletUpgrades().Lister().Get(name)
 	if err != nil {
 		return err
 	}

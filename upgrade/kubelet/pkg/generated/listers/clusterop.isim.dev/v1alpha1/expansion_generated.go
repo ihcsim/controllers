@@ -21,7 +21,3 @@ package v1alpha1
 // KubeletUpgradeListerExpansion allows custom methods to be added to
 // KubeletUpgradeLister.
 type KubeletUpgradeListerExpansion interface{}
-
-// KubeletUpgradeNamespaceListerExpansion allows custom methods to be added to
-// KubeletUpgradeNamespaceLister.
-type KubeletUpgradeNamespaceListerExpansion interface{}

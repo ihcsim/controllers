@@ -34,8 +34,8 @@ type ClusteropV1alpha1Client struct {
 	restClient rest.Interface
 }
 
-func (c *ClusteropV1alpha1Client) KubeletUpgrades(namespace string) KubeletUpgradeInterface {
-	return newKubeletUpgrades(c, namespace)
+func (c *ClusteropV1alpha1Client) KubeletUpgrades() KubeletUpgradeInterface {
+	return newKubeletUpgrades(c)
 }
 
 // NewForConfig creates a new ClusteropV1alpha1Client for the given config.

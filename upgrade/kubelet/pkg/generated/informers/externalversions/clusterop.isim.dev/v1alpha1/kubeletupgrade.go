@@ -42,33 +42,32 @@ type KubeletUpgradeInformer interface {
 type kubeletUpgradeInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
 	tweakListOptions internalinterfaces.TweakListOptionsFunc
-	namespace        string
 }
 
 // NewKubeletUpgradeInformer constructs a new informer for KubeletUpgrade type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewKubeletUpgradeInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
-	return NewFilteredKubeletUpgradeInformer(client, namespace, resyncPeriod, indexers, nil)
+func NewKubeletUpgradeInformer(client versioned.Interface, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
+	return NewFilteredKubeletUpgradeInformer(client, resyncPeriod, indexers, nil)
 }
 
 // NewFilteredKubeletUpgradeInformer constructs a new informer for KubeletUpgrade type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewFilteredKubeletUpgradeInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
+func NewFilteredKubeletUpgradeInformer(client versioned.Interface, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
 	return cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.ClusteropV1alpha1().KubeletUpgrades(namespace).List(context.TODO(), options)
+				return client.ClusteropV1alpha1().KubeletUpgrades().List(context.TODO(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.ClusteropV1alpha1().KubeletUpgrades(namespace).Watch(context.TODO(), options)
+				return client.ClusteropV1alpha1().KubeletUpgrades().Watch(context.TODO(), options)
 			},
 		},
 		&clusteropisimdevv1alpha1.KubeletUpgrade{},
@@ -78,7 +77,7 @@ func NewFilteredKubeletUpgradeInformer(client versioned.Interface, namespace str
 }
 
 func (f *kubeletUpgradeInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewFilteredKubeletUpgradeInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
+	return NewFilteredKubeletUpgradeInformer(client, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
 }
 
 func (f *kubeletUpgradeInformer) Informer() cache.SharedIndexInformer {

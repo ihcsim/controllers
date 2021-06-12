@@ -33,7 +33,6 @@ import (
 // FakeKubeletUpgrades implements KubeletUpgradeInterface
 type FakeKubeletUpgrades struct {
 	Fake *FakeClusteropV1alpha1
-	ns   string
 }
 
 var kubeletupgradesResource = schema.GroupVersionResource{Group: "clusterop.isim.dev", Version: "v1alpha1", Resource: "kubeletupgrades"}
@@ -43,8 +42,7 @@ var kubeletupgradesKind = schema.GroupVersionKind{Group: "clusterop.isim.dev", V
 // Get takes name of the kubeletUpgrade, and returns the corresponding kubeletUpgrade object, and an error if there is any.
 func (c *FakeKubeletUpgrades) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.KubeletUpgrade, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewGetAction(kubeletupgradesResource, c.ns, name), &v1alpha1.KubeletUpgrade{})
-
+		Invokes(testing.NewRootGetAction(kubeletupgradesResource, name), &v1alpha1.KubeletUpgrade{})
 	if obj == nil {
 		return nil, err
 	}
@@ -54,8 +52,7 @@ func (c *FakeKubeletUpgrades) Get(ctx context.Context, name string, options v1.G
 // List takes label and field selectors, and returns the list of KubeletUpgrades that match those selectors.
 func (c *FakeKubeletUpgrades) List(ctx context.Context, opts v1.ListOptions) (result *v1alpha1.KubeletUpgradeList, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewListAction(kubeletupgradesResource, kubeletupgradesKind, c.ns, opts), &v1alpha1.KubeletUpgradeList{})
-
+		Invokes(testing.NewRootListAction(kubeletupgradesResource, kubeletupgradesKind, opts), &v1alpha1.KubeletUpgradeList{})
 	if obj == nil {
 		return nil, err
 	}
@@ -76,15 +73,13 @@ func (c *FakeKubeletUpgrades) List(ctx context.Context, opts v1.ListOptions) (re
 // Watch returns a watch.Interface that watches the requested kubeletUpgrades.
 func (c *FakeKubeletUpgrades) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewWatchAction(kubeletupgradesResource, c.ns, opts))
-
+		InvokesWatch(testing.NewRootWatchAction(kubeletupgradesResource, opts))
 }
 
 // Create takes the representation of a kubeletUpgrade and creates it.  Returns the server's representation of the kubeletUpgrade, and an error, if there is any.
 func (c *FakeKubeletUpgrades) Create(ctx context.Context, kubeletUpgrade *v1alpha1.KubeletUpgrade, opts v1.CreateOptions) (result *v1alpha1.KubeletUpgrade, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewCreateAction(kubeletupgradesResource, c.ns, kubeletUpgrade), &v1alpha1.KubeletUpgrade{})
-
+		Invokes(testing.NewRootCreateAction(kubeletupgradesResource, kubeletUpgrade), &v1alpha1.KubeletUpgrade{})
 	if obj == nil {
 		return nil, err
 	}
@@ -94,8 +89,7 @@ func (c *FakeKubeletUpgrades) Create(ctx context.Context, kubeletUpgrade *v1alph
 // Update takes the representation of a kubeletUpgrade and updates it. Returns the server's representation of the kubeletUpgrade, and an error, if there is any.
 func (c *FakeKubeletUpgrades) Update(ctx context.Context, kubeletUpgrade *v1alpha1.KubeletUpgrade, opts v1.UpdateOptions) (result *v1alpha1.KubeletUpgrade, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateAction(kubeletupgradesResource, c.ns, kubeletUpgrade), &v1alpha1.KubeletUpgrade{})
-
+		Invokes(testing.NewRootUpdateAction(kubeletupgradesResource, kubeletUpgrade), &v1alpha1.KubeletUpgrade{})
 	if obj == nil {
 		return nil, err
 	}
@@ -106,8 +100,7 @@ func (c *FakeKubeletUpgrades) Update(ctx context.Context, kubeletUpgrade *v1alph
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
 func (c *FakeKubeletUpgrades) UpdateStatus(ctx context.Context, kubeletUpgrade *v1alpha1.KubeletUpgrade, opts v1.UpdateOptions) (*v1alpha1.KubeletUpgrade, error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateSubresourceAction(kubeletupgradesResource, "status", c.ns, kubeletUpgrade), &v1alpha1.KubeletUpgrade{})
-
+		Invokes(testing.NewRootUpdateSubresourceAction(kubeletupgradesResource, "status", kubeletUpgrade), &v1alpha1.KubeletUpgrade{})
 	if obj == nil {
 		return nil, err
 	}
@@ -117,14 +110,13 @@ func (c *FakeKubeletUpgrades) UpdateStatus(ctx context.Context, kubeletUpgrade *
 // Delete takes name of the kubeletUpgrade and deletes it. Returns an error if one occurs.
 func (c *FakeKubeletUpgrades) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewDeleteAction(kubeletupgradesResource, c.ns, name), &v1alpha1.KubeletUpgrade{})
-
+		Invokes(testing.NewRootDeleteAction(kubeletupgradesResource, name), &v1alpha1.KubeletUpgrade{})
 	return err
 }
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakeKubeletUpgrades) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewDeleteCollectionAction(kubeletupgradesResource, c.ns, listOpts)
+	action := testing.NewRootDeleteCollectionAction(kubeletupgradesResource, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1alpha1.KubeletUpgradeList{})
 	return err
@@ -133,8 +125,7 @@ func (c *FakeKubeletUpgrades) DeleteCollection(ctx context.Context, opts v1.Dele
 // Patch applies the patch and returns the patched kubeletUpgrade.
 func (c *FakeKubeletUpgrades) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.KubeletUpgrade, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(kubeletupgradesResource, c.ns, name, pt, data, subresources...), &v1alpha1.KubeletUpgrade{})
-
+		Invokes(testing.NewRootPatchSubresourceAction(kubeletupgradesResource, name, pt, data, subresources...), &v1alpha1.KubeletUpgrade{})
 	if obj == nil {
 		return nil, err
 	}

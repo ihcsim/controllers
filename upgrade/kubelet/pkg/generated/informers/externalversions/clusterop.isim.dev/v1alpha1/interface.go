@@ -41,5 +41,5 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 
 // KubeletUpgrades returns a KubeletUpgradeInformer.
 func (v *version) KubeletUpgrades() KubeletUpgradeInformer {
-	return &kubeletUpgradeInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+	return &kubeletUpgradeInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }

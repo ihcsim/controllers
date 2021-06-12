@@ -31,8 +31,9 @@ type KubeletUpgradeLister interface {
 	// List lists all KubeletUpgrades in the indexer.
 	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1alpha1.KubeletUpgrade, err error)
-	// KubeletUpgrades returns an object that can list and get KubeletUpgrades.
-	KubeletUpgrades(namespace string) KubeletUpgradeNamespaceLister
+	// Get retrieves the KubeletUpgrade from the index for a given name.
+	// Objects returned here must be treated as read-only.
+	Get(name string) (*v1alpha1.KubeletUpgrade, error)
 	KubeletUpgradeListerExpansion
 }
 
@@ -54,41 +55,9 @@ func (s *kubeletUpgradeLister) List(selector labels.Selector) (ret []*v1alpha1.K
 	return ret, err
 }
 
-// KubeletUpgrades returns an object that can list and get KubeletUpgrades.
-func (s *kubeletUpgradeLister) KubeletUpgrades(namespace string) KubeletUpgradeNamespaceLister {
-	return kubeletUpgradeNamespaceLister{indexer: s.indexer, namespace: namespace}
-}
-
-// KubeletUpgradeNamespaceLister helps list and get KubeletUpgrades.
-// All objects returned here must be treated as read-only.
-type KubeletUpgradeNamespaceLister interface {
-	// List lists all KubeletUpgrades in the indexer for a given namespace.
-	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1alpha1.KubeletUpgrade, err error)
-	// Get retrieves the KubeletUpgrade from the indexer for a given namespace and name.
-	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1alpha1.KubeletUpgrade, error)
-	KubeletUpgradeNamespaceListerExpansion
-}
-
-// kubeletUpgradeNamespaceLister implements the KubeletUpgradeNamespaceLister
-// interface.
-type kubeletUpgradeNamespaceLister struct {
-	indexer   cache.Indexer
-	namespace string
-}
-
-// List lists all KubeletUpgrades in the indexer for a given namespace.
-func (s kubeletUpgradeNamespaceLister) List(selector labels.Selector) (ret []*v1alpha1.KubeletUpgrade, err error) {
-	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1alpha1.KubeletUpgrade))
-	})
-	return ret, err
-}
-
-// Get retrieves the KubeletUpgrade from the indexer for a given namespace and name.
-func (s kubeletUpgradeNamespaceLister) Get(name string) (*v1alpha1.KubeletUpgrade, error) {
-	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
+// Get retrieves the KubeletUpgrade from the index for a given name.
+func (s *kubeletUpgradeLister) Get(name string) (*v1alpha1.KubeletUpgrade, error) {
+	obj, exists, err := s.indexer.GetByKey(name)
 	if err != nil {
 		return nil, err
 	}

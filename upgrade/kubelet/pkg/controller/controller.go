@@ -26,8 +26,8 @@ import (
 type Controller struct {
 	clientsetsK8s      kubernetes.Interface
 	clientsetsUpgrade  clusteropclientsetsv1alpha1.Interface
-	k8sinformers       k8sinformers.SharedInformerFactory
-	clusteropinformers clusteropinformers.SharedInformerFactory
+	k8sInformers       k8sinformers.SharedInformerFactory
+	clusteropInformers clusteropinformers.SharedInformerFactory
 
 	name string
 
@@ -67,8 +67,8 @@ func New(
 	c := &Controller{
 		clientsetsK8s:      clientsetsK8s,
 		clientsetsUpgrade:  clientsetsCRD,
-		k8sinformers:       k8sinformers,
-		clusteropinformers: clusteropinformers,
+		k8sInformers:       k8sinformers,
+		clusteropInformers: clusteropinformers,
 		name:               name,
 		workqueue:          workqueue,
 		recorder:           recorder,
@@ -79,6 +79,15 @@ func New(
 			AddFunc: c.enqueue,
 			UpdateFunc: func(oldobj, newobj interface{}) {
 				c.enqueue(newobj)
+			},
+		},
+	)
+
+	k8sinformers.Core().V1().Nodes().Informer().AddEventHandler(
+		cache.ResourceEventHandlerFuncs{
+			AddFunc: c.enqueueNode,
+			UpdateFunc: func(oldobj, newobj interface{}) {
+				c.enqueueNode(newobj)
 			},
 		},
 	)
@@ -96,9 +105,9 @@ func (c *Controller) Sync(stop <-chan struct{}) error {
 	}()
 
 	var (
-		nodesSynced = c.k8sinformers.Core().V1().Nodes().Informer().HasSynced
-		podsSynced  = c.k8sinformers.Core().V1().Pods().Informer().HasSynced
-		crdSynced   = c.clusteropinformers.Clusterop().V1alpha1().KubeletUpgrades().Informer().HasSynced
+		nodesSynced = c.k8sInformers.Core().V1().Nodes().Informer().HasSynced
+		podsSynced  = c.k8sInformers.Core().V1().Pods().Informer().HasSynced
+		crdSynced   = c.clusteropInformers.Clusterop().V1alpha1().KubeletUpgrades().Informer().HasSynced
 	)
 	klog.Info("waiting for informer caches to sync")
 	if ok := cache.WaitForCacheSync(stop, nodesSynced, podsSynced, crdSynced); !ok {
@@ -116,18 +125,22 @@ func (c *Controller) Sync(stop <-chan struct{}) error {
 }
 
 func (c *Controller) enqueue(obj interface{}) {
+}
+
+func (c *Controller) enqueueNode(obj interface{}) {
 	key, err := cache.MetaNamespaceKeyFunc(obj)
 	if err != nil {
 		utilruntime.HandleError(err)
 		return
 	}
 
-	if _, ok := obj.(*clusteropv1alpha1.KubeletUpgrade); !ok {
+	if _, ok := obj.(*corev1.Node); !ok {
 		klog.Error("failed to enqueue obj %s. reason: wrong type", key)
 		return
 	}
 
 	c.workqueue.Add(key)
+
 }
 
 func (c *Controller) dequeue() {
@@ -172,7 +185,7 @@ func (c *Controller) syncHandler(key string) error {
 	}
 
 	klog.Info("sync-ing obj: %s", name)
-	obj, err := c.clusteropinformers.Clusterop().V1alpha1().KubeletUpgrades().Lister().KubeletUpgrades("").Get(name)
+	obj, err := c.k8sInformers.Core().V1().Nodes().Lister().Get(name)
 	if err != nil {
 		return err
 	}

@@ -1,4 +1,4 @@
-apiVersion: clusterop.isim.dev
+apiVersion: clusterop.isim.dev/v1alpha1
 kind: KubeletUpgrade
 metadata:
   name: replace-nodes-strict

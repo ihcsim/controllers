@@ -54,6 +54,6 @@ spec:
                 type: object
                 properties:
                   matchLabels:
-                    type: string
+                    type: object
               strategy:
                 type: string

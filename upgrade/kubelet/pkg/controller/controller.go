@@ -11,6 +11,8 @@ import (
 	clusteropinformers "github.com/ihcsim/controllers/upgrade/kubelet/pkg/generated/informers/externalversions"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	k8sinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -71,6 +73,7 @@ func New(
 		k8sInformers:        k8sInformers,
 		clusteropClientsets: clusteropClientsets,
 		clusteropInformers:  clusteropInformers,
+		maxWorkersCount:     1,
 		name:                name,
 		ticker:              time.NewTicker(time.Second),
 		workqueue:           workqueue,
@@ -119,6 +122,8 @@ LOOP:
 	for {
 		select {
 		case <-stop:
+			klog.Info("shutting down workqueue")
+			c.workqueue.ShutDown()
 			break LOOP
 
 		case <-c.ticker.C:
@@ -169,37 +174,36 @@ func (c *Controller) enqueue(obj interface{}) {
 	}
 
 	c.workqueue.Add(key)
+	klog.Infof("added KubeletUpgrade obj %s", key)
 }
 
 func (c *Controller) dequeue(stop <-chan struct{}) {
-	// shutdown queue when stop is closed
-	go func() {
-		<-stop
-		klog.Info("shutting down workqueue")
-		c.workqueue.ShutDown()
-	}()
-
 	obj, shutdown := c.workqueue.Get()
 	if shutdown {
 		return
 	}
-	defer c.workqueue.Done(obj)
 
 	// obj is a string of the form namespace/name
 	key, ok := obj.(string)
 	if !ok {
-		// if obj is invalid, call Forget to avoid further unnecessary processing
-		c.workqueue.Forget(obj)
-		utilruntime.HandleError(fmt.Errorf("items in workqueue are expected to be of string type. but got %v (type %T)", obj, obj))
+		utilruntime.HandleError(fmt.Errorf("unsupported workqueue key type %T. obj: %v", obj, obj))
 		return
 	}
 
-	if err := c.syncHandler(key); err != nil {
-		// transient error, enqueue obj again
-		c.workqueue.AddRateLimited(key)
-		utilruntime.HandleError(fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error()))
+	defer c.workqueue.Done(obj)
+	if err := c.sync(key); err != nil {
+		if errors.IsNotFound(err) {
+			klog.Infof("obj %s no longer exists", key)
+			return
+		}
+
+		utilruntime.HandleError(fmt.Errorf("error syncing: %w", err))
 		return
 	}
+	klog.Infof("upgrade %s completed successfully", key)
+
+	// re-queue upgrade object for future processing
+	c.workqueue.AddRateLimited(key)
 }
 
 func (c *Controller) purge(obj interface{}) {
@@ -209,22 +213,45 @@ func (c *Controller) purge(obj interface{}) {
 		return
 	}
 
+	c.workqueue.Done(key)
 	c.workqueue.Forget(key)
+	klog.Infof("deleted KubeletUpgrade obj %s", key)
 }
 
-func (c *Controller) syncHandler(key string) error {
+func (c *Controller) sync(key string) error {
 	// convert the namespace/name key into its distinct namespace and name
 	_, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
 		return err
 	}
 
-	klog.Infof("retrieving KubeletUpgrade obj: %s", name)
+	klog.Infof("getting KubeletUpgrade obj %s", name)
 	obj, err := c.clusteropInformers.Clusterop().V1alpha1().KubeletUpgrades().Lister().Get(name)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("%+v\n", obj)
+	nextScheduledTime := obj.Status.NextScheduledTime
+	if nextScheduledTime.IsZero() {
+		return nil
+	}
+
+	now := metav1.Now()
+	if !obj.Status.NextScheduledTime.Before(&now) {
+		return nil
+	}
+
+	if err := upgradeKubelet(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func next() metav1.Time {
+	return metav1.NewTime(time.Now().Add(time.Minute))
+}
+
+func upgradeKubelet() error {
 	return nil
 }

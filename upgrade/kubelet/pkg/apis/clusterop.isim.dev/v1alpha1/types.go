@@ -39,18 +39,18 @@ const (
 type KubeletUpgradeStatus struct {
 	History           []UpgradeHistory `json:"history"`
 	KubeletVersion    string           `json:"kubeletVersion"`
-	LastCompletedTime *metav1.Time     `json:"lastCompletedTime"`
+	LastCompletedTime metav1.Time      `json:"lastCompletedTime"`
 	LastUpgradeResult string           `json:"lastUpgradeResult"`
-	NextScheduledTime *metav1.Time     `json:"nextScheduledTime"`
+	NextScheduledTime metav1.Time      `json:"nextScheduledTime"`
 }
 
 // UpgradeHistory shows the history of a kubelet upgrade.
 type UpgradeHistory struct {
-	KubeletVersion    string       `json:"kubeletVersion"`
-	LastScheduledTime *metav1.Time `json:"lastScheduledTime"`
-	LastCompletedTime *metav1.Time `json:"lastCompletedTime"`
-	Node              string       `json:"node"`
-	Outcome           string       `json:"outcome"`
+	KubeletVersion    string      `json:"kubeletVersion"`
+	LastScheduledTime metav1.Time `json:"lastScheduledTime"`
+	LastCompletedTime metav1.Time `json:"lastCompletedTime"`
+	Node              string      `json:"node"`
+	Outcome           string      `json:"outcome"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

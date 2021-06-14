@@ -108,6 +108,7 @@ func (c *Controller) Run(stop <-chan struct{}) error {
 		return err
 	}
 
+	klog.Info("recounciling KubeletUpgrade objects")
 LOOP:
 	for {
 		select {
@@ -190,6 +191,13 @@ func (c *Controller) enqueueMatchingNodes(obj *clusteropv1alpha1.KubeletUpgrade,
 			return err
 		}
 
+		// exclude control plane nodes
+		requirements, err := excludeRequirements()
+		if err != nil {
+			return err
+		}
+		selector = selector.Add(requirements...)
+
 		nodes, err := c.k8sInformers.Core().V1().Nodes().Lister().List(selector)
 		if err != nil {
 			return err
@@ -216,6 +224,8 @@ func (c *Controller) enqueueMatchingNodes(obj *clusteropv1alpha1.KubeletUpgrade,
 
 		return final
 	}
+
+	return nil
 }
 
 func (c *Controller) enqueueNode(obj interface{}) error {

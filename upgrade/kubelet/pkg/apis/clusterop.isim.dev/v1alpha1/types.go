@@ -23,12 +23,12 @@ type KubeletUpgrade struct {
 
 // KubeletUpgradeSpec represents the spec of the upgrade process
 type KubeletUpgradeSpec struct {
-	FailurePolicy        string               `json:"failurePolicy"`
-	MaxUnavailable       int                  `json:"maxUnavailable"`
-	Schedule             string               `json:"schedule"`
-	Selector             metav1.LabelSelector `json:"selector"`
-	Strategy             string               `json:"strategy"`
-	TargetKubeletVersion string               `json:"targetKubeletVersion"`
+	FailurePolicy        string                `json:"failurePolicy"`
+	MaxUnavailable       int                   `json:"maxUnavailable"`
+	Schedule             string                `json:"schedule"`
+	Selector             *metav1.LabelSelector `json:"selector"`
+	Strategy             string                `json:"strategy"`
+	TargetKubeletVersion string                `json:"targetKubeletVersion"`
 }
 
 const (

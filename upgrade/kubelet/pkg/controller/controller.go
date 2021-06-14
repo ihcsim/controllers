@@ -133,12 +133,9 @@ func (c *Controller) syncCache(stop <-chan struct{}) error {
 		upgradeSynced = c.clusteropInformers.Clusterop().V1alpha1().KubeletUpgrades().Informer().HasSynced
 	)
 
-	klog.Info("waiting for informer caches to sync")
 	if ok := cache.WaitForCacheSync(stop, nodesSynced, upgradeSynced); !ok {
-		return fmt.Errorf("failed to wait for caches to sync")
+		return fmt.Errorf("cache sync'ed failed")
 	}
-	klog.Info("cache sync completed")
-
 	return nil
 }
 
@@ -152,6 +149,10 @@ func (c *Controller) runUpgrades() error {
 	now := metav1.Now()
 	for _, upgrade := range upgrades {
 		c.updateNextScheduledTime(upgrade, &now)
+		if err := c.enqueueMatchingNodes(upgrade, &now); err != nil {
+			errs = append(errs, err)
+			continue
+		}
 	}
 
 	var final error
@@ -179,20 +180,56 @@ func (c *Controller) updateNextScheduledTime(obj *clusteropv1alpha1.KubeletUpgra
 	}
 }
 
-func (c *Controller) enqueue(obj interface{}) {
+// enqueueMatchingNodes finds all the matching nodes of the KubeletUpgrade
+// object and add them to the workqueue.
+func (c *Controller) enqueueMatchingNodes(obj *clusteropv1alpha1.KubeletUpgrade, now *metav1.Time) error {
+	nextScheduledTime := obj.Status.NextScheduledTime
+	if now.Before(nextScheduledTime) || now.Equal(nextScheduledTime) {
+		selector, err := metav1.LabelSelectorAsSelector(obj.Spec.Selector)
+		if err != nil {
+			return err
+		}
+
+		nodes, err := c.k8sInformers.Core().V1().Nodes().Lister().List(selector)
+		if err != nil {
+			return err
+		}
+
+		if len(nodes) == 0 {
+			klog.V(4).Infof("no matching nodes found for KubeletUpgrade %s", obj.GetName())
+			return nil
+		}
+
+		var errs []error
+		for _, node := range nodes {
+			if err := c.enqueueNode(node); err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			klog.V(4).Infof("added node %s to workqueue of %s", node.GetName(), obj.GetName())
+		}
+
+		var final error
+		for _, err := range errs {
+			final = fmt.Errorf("%s\n%s", final, err)
+		}
+
+		return final
+	}
+}
+
+func (c *Controller) enqueueNode(obj interface{}) error {
 	key, err := cache.MetaNamespaceKeyFunc(obj)
 	if err != nil {
-		utilruntime.HandleError(err)
-		return
+		return err
 	}
 
-	if _, ok := obj.(*clusteropv1alpha1.KubeletUpgrade); !ok {
-		klog.Errorf("failed to enqueue obj %s. reason: wrong type", key)
-		return
+	if _, ok := obj.(*corev1.Node); !ok {
+		return fmt.Errorf("failed to enqueue node %s. obj type must be *corev1.Node", key)
 	}
 
 	c.workqueue.Add(key)
-	klog.Infof("added KubeletUpgrade obj %s", key)
+	return nil
 }
 
 func (c *Controller) dequeue(stop <-chan struct{}) {
@@ -222,18 +259,6 @@ func (c *Controller) dequeue(stop <-chan struct{}) {
 
 	// re-queue upgrade object for future processing
 	c.workqueue.AddRateLimited(key)
-}
-
-func (c *Controller) purge(obj interface{}) {
-	key, err := cache.MetaNamespaceKeyFunc(obj)
-	if err != nil {
-		utilruntime.HandleError(err)
-		return
-	}
-
-	c.workqueue.Done(key)
-	c.workqueue.Forget(key)
-	klog.Infof("deleted KubeletUpgrade obj %s", key)
 }
 
 func (c *Controller) sync(key string) error {

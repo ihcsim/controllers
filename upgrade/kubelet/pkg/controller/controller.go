@@ -1,8 +1,8 @@
 package controller
 
 import (
+	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	clusteropv1alpha1 "github.com/ihcsim/controllers/upgrade/kubelet/pkg/apis/clusterop.isim.dev/v1alpha1"
@@ -13,6 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	k8sinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -75,7 +76,7 @@ func New(
 		clusteropInformers:  clusteropInformers,
 		maxWorkersCount:     1,
 		name:                name,
-		ticker:              time.NewTicker(time.Second),
+		ticker:              time.NewTicker(time.Minute * 1),
 		workqueue:           workqueue,
 		recorder:            recorder,
 	}
@@ -85,13 +86,7 @@ func New(
 	)
 
 	clusteropInformers.Clusterop().V1alpha1().KubeletUpgrades().Informer().AddEventHandler(
-		cache.ResourceEventHandlerFuncs{
-			AddFunc: c.enqueue,
-			UpdateFunc: func(oldobj, newObj interface{}) {
-				c.enqueue(newObj)
-			},
-			DeleteFunc: c.purge,
-		},
+		cache.ResourceEventHandlerFuncs{},
 	)
 
 	return c
@@ -113,11 +108,6 @@ func (c *Controller) Run(stop <-chan struct{}) error {
 		return err
 	}
 
-	var (
-		currentWorkersCount = 0
-		waitGroup           = sync.WaitGroup{}
-	)
-
 LOOP:
 	for {
 		select {
@@ -127,23 +117,13 @@ LOOP:
 			break LOOP
 
 		case <-c.ticker.C:
-			if currentWorkersCount <= c.maxWorkersCount {
-				waitGroup.Add(1)
-				currentWorkersCount++
-
-				go func() {
-					defer func() {
-						waitGroup.Done()
-						currentWorkersCount--
-					}()
-					c.dequeue(stop)
-				}()
+			if err := c.runUpgrades(); err != nil {
+				return err
 			}
 		}
 	}
-	waitGroup.Wait()
-	klog.Info("stopping controller")
 
+	klog.Info("stopping controller")
 	return nil
 }
 
@@ -158,7 +138,45 @@ func (c *Controller) syncCache(stop <-chan struct{}) error {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
 	klog.Info("cache sync completed")
+
 	return nil
+}
+
+func (c *Controller) runUpgrades() error {
+	upgrades, err := c.clusteropInformers.Clusterop().V1alpha1().KubeletUpgrades().Lister().List(labels.Everything())
+	if err != nil {
+		return err
+	}
+
+	var errs []error
+	now := metav1.Now()
+	for _, upgrade := range upgrades {
+		c.updateNextScheduledTime(upgrade, &now)
+	}
+
+	var final error
+	for _, err := range errs {
+		final = fmt.Errorf("%s\n%s", final, err)
+	}
+
+	return final
+}
+
+// updateNextScheduledTime updates the "next schedule time" property of the
+// KubeletConfig obj status, and broadcast an event showing the result of the
+// update.
+func (c *Controller) updateNextScheduledTime(obj *clusteropv1alpha1.KubeletUpgrade, now *metav1.Time) {
+	nextScheduledTime := obj.Status.NextScheduledTime
+	if nextScheduledTime.IsZero() || nextScheduledTime.Before(now) {
+		cloned := (*obj).UpdateNextScheduledTime(now)
+		eventType := corev1.EventTypeNormal
+		if _, err := c.clusteropClientsets.ClusteropV1alpha1().KubeletUpgrades().UpdateStatus(context.Background(), cloned, metav1.UpdateOptions{}); err != nil {
+			eventType = corev1.EventTypeWarning
+		}
+
+		mostRecentCondition := cloned.Status.Conditions[len(cloned.Status.Conditions)-1]
+		c.recorder.Event(cloned, eventType, mostRecentCondition.Reason, mostRecentCondition.Message)
+	}
 }
 
 func (c *Controller) enqueue(obj interface{}) {
@@ -231,11 +249,6 @@ func (c *Controller) sync(key string) error {
 		return err
 	}
 
-	nextScheduledTime := obj.Status.NextScheduledTime
-	if nextScheduledTime.IsZero() {
-		return nil
-	}
-
 	now := metav1.Now()
 	if !obj.Status.NextScheduledTime.Before(&now) {
 		return nil
@@ -246,10 +259,6 @@ func (c *Controller) sync(key string) error {
 	}
 
 	return nil
-}
-
-func next() metav1.Time {
-	return metav1.NewTime(time.Now().Add(time.Minute))
 }
 
 func upgradeKubelet() error {

@@ -5,7 +5,7 @@ metadata:
 spec:
   failurePolicy: strict
   maxUnavailable: 1
-  schedule: "0 0 * * 0"
+  schedule: "@weekly"
   selector:
     matchLabels:
       clusterop.isim.dev/kubelet-upgrade: retain-nodes-ignore

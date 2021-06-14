@@ -19,18 +19,9 @@ spec:
     subresources:
       status: {}
     additionalPrinterColumns:
-    - name: Kubelet version
+    - name: Kubelet Version
       description: The kubelet version of the last successful upgrade.
       jsonPath: .status.kubeletVersion
-      type: string
-    - name: Last Upgrade Result
-      description: The aggregated results of the last upgrade. E.g., "upgrade completed successfully", "2/10 kubelets failed to upgrade"
-      jsonPath: .status.lastUpgradeResult
-      type: string
-    - name: Last Completed Time
-      description: The datetime when the last upgrade was completed
-      format: date-time
-      jsonPath: .status.lastCompletedTime
       type: string
     - name: Next Scheduled Time
       description: The datetime of the next scheduled upgrade
@@ -57,3 +48,27 @@ spec:
                     type: object
               strategy:
                 type: string
+          status:
+            type: object
+            properties:
+              conditions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    lastTransitionTime:
+                      type: string
+                      format: date-time
+                    message:
+                      type: string
+                    reason:
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+              kubeletVersion:
+                type: string
+              nextScheduledTime:
+                type: string
+                format: date-time

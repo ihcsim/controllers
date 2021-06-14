@@ -20,11 +20,12 @@ type KubeletUpgrade struct {
 
 // KubeletUpgradeSpec represents the spec of the upgrade process
 type KubeletUpgradeSpec struct {
-	FailurePolicy  string               `json:"failurePolicy"`
-	MaxUnavailable int                  `json:"maxUnavailable"`
-	Schedule       string               `json:"schedule"`
-	Selector       metav1.LabelSelector `json:"selector"`
-	Strategy       string               `json:"strategy"`
+	FailurePolicy        string               `json:"failurePolicy"`
+	MaxUnavailable       int                  `json:"maxUnavailable"`
+	Schedule             string               `json:"schedule"`
+	Selector             metav1.LabelSelector `json:"selector"`
+	Strategy             string               `json:"strategy"`
+	TargetKubeletVersion string               `json:"targetKubeletVersion"`
 }
 
 const (
@@ -37,20 +38,18 @@ const (
 
 // KubeletUpgradeStatus represents the status of the upgrade process.
 type KubeletUpgradeStatus struct {
-	History           []UpgradeHistory `json:"history"`
-	KubeletVersion    string           `json:"kubeletVersion"`
-	LastCompletedTime metav1.Time      `json:"lastCompletedTime"`
-	LastUpgradeResult string           `json:"lastUpgradeResult"`
-	NextScheduledTime metav1.Time      `json:"nextScheduledTime"`
+	Conditions        []UpgradeCondition `json:"conditions"`
+	KubeletVersion    string             `json:"kubeletVersion"`
+	NextScheduledTime metav1.Time        `json:"nextScheduledTime"`
 }
 
-// UpgradeHistory shows the history of a kubelet upgrade.
-type UpgradeHistory struct {
-	KubeletVersion    string      `json:"kubeletVersion"`
-	LastScheduledTime metav1.Time `json:"lastScheduledTime"`
-	LastCompletedTime metav1.Time `json:"lastCompletedTime"`
-	Node              string      `json:"node"`
-	Outcome           string      `json:"outcome"`
+// UpgradeCondition shows the observed condition of an upgrade.
+type UpgradeCondition struct {
+	LastTransitionTime metav1.Time
+	Message            string
+	Reason             string
+	Status             string
+	Type               string
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

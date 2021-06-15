@@ -124,14 +124,13 @@ LOOP:
 	for {
 		select {
 		case <-stop:
-			klog.Info("shutting down workqueue")
-			c.workqueue.ShutDown()
 			break LOOP
 
 		case <-c.ticker.C:
 			klog.Info("polling KubeletConfig schedules")
 			if err := c.pollSchedules(); err != nil {
-				return err
+				utilruntime.HandleError(fmt.Errorf("last schedules poll failed: %s", err))
+				continue
 			}
 			klog.Infof("polling completed.. retrying in %s", c.tickerDuration)
 		}

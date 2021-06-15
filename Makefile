@@ -42,3 +42,6 @@ test:
 
 testenv-bin:
 	tar xvfz crd/bin/envtest-bins.tar.gz -C crd/bin --strip-components 2
+
+kind:
+	kind create cluster --config ./etc/kind.yaml

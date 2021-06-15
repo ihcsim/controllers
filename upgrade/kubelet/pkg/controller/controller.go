@@ -88,7 +88,16 @@ func New(
 	)
 
 	clusteropInformers.Clusterop().V1alpha1().KubeletUpgrades().Informer().AddEventHandler(
-		cache.ResourceEventHandlerFuncs{},
+		cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				now := metav1.Now()
+				c.poll(obj, &now)
+			},
+			UpdateFunc: func(oldObj, newObj interface{}) {
+				now := metav1.Now()
+				c.poll(newObj, &now)
+			},
+		},
 	)
 
 	return c
@@ -176,7 +185,12 @@ func (c *Controller) pollSchedules() error {
 	return final
 }
 
-func (c *Controller) poll(upgrade *clusteropv1alpha1.KubeletUpgrade, now *metav1.Time) error {
+func (c *Controller) poll(obj interface{}, now *metav1.Time) error {
+	upgrade, ok := obj.(*clusteropv1alpha1.KubeletUpgrade)
+	if !ok {
+		return fmt.Errorf("failed to poll KubeletUpgrade object. Unsupported type %T", obj)
+	}
+
 	c.updateNextScheduledTime(upgrade, now)
 	if err := c.enqueueMatchingNodes(upgrade, now); err != nil {
 		return err

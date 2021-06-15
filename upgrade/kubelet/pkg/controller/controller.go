@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	clusteropv1alpha1 "github.com/ihcsim/controllers/upgrade/kubelet/pkg/apis/clusterop.isim.dev/v1alpha1"
@@ -32,9 +33,10 @@ type Controller struct {
 	clusteropClientsets clusteropclientsetsv1alpha1.Interface
 	clusteropInformers  clusteropinformers.SharedInformerFactory
 
-	maxWorkersCount int
-	name            string
-	ticker          *time.Ticker
+	workerCount    int
+	name           string
+	ticker         *time.Ticker
+	tickerDuration time.Duration
 
 	// recorder is an event recorder for recording Event resources to the
 	// Kubernetes API.
@@ -74,9 +76,9 @@ func New(
 		k8sInformers:        k8sInformers,
 		clusteropClientsets: clusteropClientsets,
 		clusteropInformers:  clusteropInformers,
-		maxWorkersCount:     1,
 		name:                name,
 		ticker:              time.NewTicker(time.Minute * 1),
+		tickerDuration:      time.Minute * 1,
 		workqueue:           workqueue,
 		recorder:            recorder,
 	}
@@ -107,8 +109,8 @@ func (c *Controller) Run(stop <-chan struct{}) error {
 	if err := c.syncCache(stop); err != nil {
 		return err
 	}
+	klog.Info("controller ready")
 
-	klog.Info("recounciling KubeletUpgrade objects")
 LOOP:
 	for {
 		select {
@@ -118,9 +120,11 @@ LOOP:
 			break LOOP
 
 		case <-c.ticker.C:
-			if err := c.runUpgrades(); err != nil {
+			klog.Info("polling KubeletConfig schedules")
+			if err := c.pollSchedules(); err != nil {
 				return err
 			}
+			klog.Infof("polling completed.. retrying in %s", c.tickerDuration)
 		}
 	}
 
@@ -140,19 +144,27 @@ func (c *Controller) syncCache(stop <-chan struct{}) error {
 	return nil
 }
 
-func (c *Controller) runUpgrades() error {
+// pollSchedules checks the schedule of all the KubeletUpgrade objects to
+// see if any upgrades are due. If they are, all the matching nodes will be added
+// to the controller's workqueue, for further processing.
+func (c *Controller) pollSchedules() error {
 	upgrades, err := c.clusteropInformers.Clusterop().V1alpha1().KubeletUpgrades().Lister().List(labels.Everything())
 	if err != nil {
 		return err
 	}
 
+	if len(upgrades) == 0 {
+		klog.Infof("no KubeletConfig objects found")
+		return nil
+	}
+
 	var errs []error
 	now := metav1.Now()
 	for _, upgrade := range upgrades {
-		c.updateNextScheduledTime(upgrade, &now)
-		if err := c.enqueueMatchingNodes(upgrade, &now); err != nil {
+		// remains block until upgrade is completed to ensure stable and predictable
+		// sequential upgrades
+		if err := c.poll(upgrade, &now); err != nil {
 			errs = append(errs, err)
-			continue
 		}
 	}
 
@@ -162,6 +174,21 @@ func (c *Controller) runUpgrades() error {
 	}
 
 	return final
+}
+
+func (c *Controller) poll(upgrade *clusteropv1alpha1.KubeletUpgrade, now *metav1.Time) error {
+	c.updateNextScheduledTime(upgrade, now)
+	if err := c.enqueueMatchingNodes(upgrade, now); err != nil {
+		return err
+	}
+
+	// no more work to do since there are no matching nodes
+	if c.workqueue.Len() == 0 {
+		return nil
+	}
+
+	// block until all matching nodes are upgraded
+	return c.startUpgrade(upgrade)
 }
 
 // updateNextScheduledTime updates the "next schedule time" property of the
@@ -221,7 +248,6 @@ func (c *Controller) enqueueMatchingNodes(obj *clusteropv1alpha1.KubeletUpgrade,
 		for _, err := range errs {
 			final = fmt.Errorf("%s\n%s", final, err)
 		}
-
 		return final
 	}
 
@@ -242,60 +268,92 @@ func (c *Controller) enqueueNode(obj interface{}) error {
 	return nil
 }
 
-func (c *Controller) dequeue(stop <-chan struct{}) {
-	obj, shutdown := c.workqueue.Get()
-	if shutdown {
-		return
-	}
+func (c *Controller) startUpgrade(upgrade *clusteropv1alpha1.KubeletUpgrade) error {
+	var (
+		wg         = sync.WaitGroup{}
+		numWorkers = upgrade.Spec.MaxUnavailable
+		numCurrent = 0
+		errChan    = make(chan error, numWorkers)
+		errs       error
+	)
 
-	// obj is a string of the form namespace/name
-	key, ok := obj.(string)
-	if !ok {
-		utilruntime.HandleError(fmt.Errorf("unsupported workqueue key type %T. obj: %v", obj, obj))
-		return
-	}
-
-	defer c.workqueue.Done(obj)
-	if err := c.sync(key); err != nil {
-		if errors.IsNotFound(err) {
-			klog.Infof("obj %s no longer exists", key)
-			return
+	defer close(errChan)
+	go func() {
+		for err := range errChan {
+			errs = fmt.Errorf("%s. %s", errs, err)
 		}
+	}()
 
-		utilruntime.HandleError(fmt.Errorf("error syncing: %w", err))
-		return
+	for i := 0; numCurrent < numWorkers; i++ {
+		klog.Infof("spawning worker %d", numCurrent)
+		wg.Add(1)
+		numCurrent++
+
+		go func() {
+			defer func() {
+				klog.Infof("terminating worker %d", numCurrent)
+				wg.Done()
+			}()
+			errChan <- c.runWorker()
+		}()
 	}
-	klog.Infof("upgrade %s completed successfully", key)
+	wg.Wait()
+	klog.Info("terminated all workers")
 
-	// re-queue upgrade object for future processing
-	c.workqueue.AddRateLimited(key)
+	return errs
 }
 
-func (c *Controller) sync(key string) error {
+func (c *Controller) runWorker() error {
+	obj, shutdown := c.workqueue.Get()
+	if shutdown {
+		return nil
+	}
+	defer c.workqueue.Done(obj)
+
+	// obj is a string of the form namespace/name.
+	// if it isn't, remove it from workqueue by calling Forget().
+	key, ok := obj.(string)
+	if !ok {
+		c.workqueue.Forget(obj)
+		return fmt.Errorf("unsupported workqueue key type %T. obj: %v", obj, obj)
+	}
+
+	klog.Infof("starting to upgrade %s", key)
+	if result := c.upgradeKubelet(key); result.Err != nil {
+		if errors.IsNotFound(result.Err) {
+			klog.Infof("obj %s no longer exists; waiting for cache to sync", key)
+			return nil
+		}
+
+		// re-queue node object for retries if error is transient
+		if result.Retry {
+			c.workqueue.AddRateLimited(key)
+		}
+
+		return fmt.Errorf("error upgrading %s: %w", key, result.Err)
+	}
+	klog.Infof("finish upgrading %s", key)
+	return nil
+}
+
+func (c *Controller) upgradeKubelet(key string) *Result {
+	result := &Result{}
+
 	// convert the namespace/name key into its distinct namespace and name
 	_, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
-		return err
+		result.Err = err
+		return result
 	}
 
 	klog.Infof("getting KubeletUpgrade obj %s", name)
-	obj, err := c.clusteropInformers.Clusterop().V1alpha1().KubeletUpgrades().Lister().Get(name)
+	obj, err := c.k8sInformers.Core().V1().Nodes().Lister().Get(name)
 	if err != nil {
-		return err
+		result.Err = err
+		return result
 	}
 
-	now := metav1.Now()
-	if !obj.Status.NextScheduledTime.Before(&now) {
-		return nil
-	}
+	fmt.Printf("%+v\n", obj)
 
-	if err := upgradeKubelet(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func upgradeKubelet() error {
-	return nil
+	return result
 }

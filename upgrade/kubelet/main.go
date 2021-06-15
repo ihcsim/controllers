@@ -34,7 +34,6 @@ func main() {
 	stop := handleSignal()
 	c := controller.New(k8sClientsets, k8sInformers, clusteropClientsets, clusteropInformers)
 
-	klog.Info("starting controller")
 	if err := c.Run(stop); err != nil {
 		klog.Errorf("controller exited with errors: %s", err)
 	}

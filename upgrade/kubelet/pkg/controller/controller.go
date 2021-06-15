@@ -33,10 +33,10 @@ type Controller struct {
 	clusteropClientsets clusteropclientsetsv1alpha1.Interface
 	clusteropInformers  clusteropinformers.SharedInformerFactory
 
-	workerCount    int
-	name           string
-	ticker         *time.Ticker
-	tickerDuration time.Duration
+	workerCount  int
+	name         string
+	ticker       *time.Ticker
+	tickDuration time.Duration
 
 	// recorder is an event recorder for recording Event resources to the
 	// Kubernetes API.
@@ -71,14 +71,15 @@ func New(
 		workqueue.DefaultControllerRateLimiter(),
 		"kubeletUpgradeQueue")
 
+	tickDuration := time.Minute * 1
 	c := &Controller{
 		k8sClientsets:       k8sClientsets,
 		k8sInformers:        k8sInformers,
 		clusteropClientsets: clusteropClientsets,
 		clusteropInformers:  clusteropInformers,
 		name:                name,
-		ticker:              time.NewTicker(time.Minute * 1),
-		tickerDuration:      time.Minute * 1,
+		ticker:              time.NewTicker(tickDuration),
+		tickDuration:        tickDuration,
 		workqueue:           workqueue,
 		recorder:            recorder,
 	}
@@ -132,7 +133,7 @@ LOOP:
 				utilruntime.HandleError(fmt.Errorf("last schedules poll failed: %s", err))
 				continue
 			}
-			klog.Infof("polling completed.. retrying in %s", c.tickerDuration)
+			klog.Infof("polling completed.. retrying in %s", c.tickDuration)
 		}
 	}
 
@@ -169,8 +170,7 @@ func (c *Controller) pollSchedules() error {
 	var errs []error
 	now := metav1.Now()
 	for _, upgrade := range upgrades {
-		// remains block until upgrade is completed to ensure stable and predictable
-		// sequential upgrades
+		// remain blocked to ensure stable, predictable sequential upgrade
 		if err := c.poll(upgrade, &now); err != nil {
 			errs = append(errs, err)
 		}
@@ -190,7 +190,21 @@ func (c *Controller) poll(obj interface{}, now *metav1.Time) error {
 		return fmt.Errorf("failed to poll KubeletUpgrade object. Unsupported type %T", obj)
 	}
 
-	c.updateNextScheduledTime(upgrade, now)
+	_, changed, err := c.updateNextScheduledTime(upgrade, now)
+	if err != nil {
+		return err
+	}
+
+	// return if the KubeletUpgrade object is updated because the eventHandler
+	// will call poll() again with the updated object
+	if changed {
+		return nil
+	}
+
+	if !c.canUpgrade(upgrade, now) {
+		return nil
+	}
+
 	if err := c.enqueueMatchingNodes(upgrade, now); err != nil {
 		return err
 	}
@@ -200,71 +214,95 @@ func (c *Controller) poll(obj interface{}, now *metav1.Time) error {
 		return nil
 	}
 
-	// block until all matching nodes are upgraded
-	return c.startUpgrade(upgrade)
+	errChan := make(chan error)
+	go func() {
+		defer close(errChan)
+
+		now := metav1.Now()
+		if err := c.recordUpgradeStatus(upgrade, "started", nil, &now); err != nil {
+			utilruntime.HandleError(fmt.Errorf("can't upgrade condition: %s", err))
+			// ok to continue
+		}
+
+		// block until all matching nodes are upgraded
+		errChan <- c.startUpgrade(upgrade)
+	}()
+
+	err = <-errChan
+	endTime := metav1.Now()
+	c.recordUpgradeStatus(upgrade, "completed", err, &endTime)
+
+	return err
 }
 
 // updateNextScheduledTime updates the "next schedule time" property of the
 // KubeletConfig obj status, and broadcast an event showing the result of the
 // update.
-func (c *Controller) updateNextScheduledTime(obj *clusteropv1alpha1.KubeletUpgrade, now *metav1.Time) {
+func (c *Controller) updateNextScheduledTime(obj *clusteropv1alpha1.KubeletUpgrade, now *metav1.Time) (*clusteropv1alpha1.KubeletUpgrade, bool, error) {
 	nextScheduledTime := obj.Status.NextScheduledTime
 	if nextScheduledTime.IsZero() || nextScheduledTime.Before(now) {
-		cloned := (*obj).UpdateNextScheduledTime(now)
-		eventType := corev1.EventTypeNormal
-		if _, err := c.clusteropClientsets.ClusteropV1alpha1().KubeletUpgrades().UpdateStatus(context.Background(), cloned, metav1.UpdateOptions{}); err != nil {
-			eventType = corev1.EventTypeWarning
-		}
+		cloned := obj.UpdateNextScheduledTime(now)
 
+		// broadcast event
+		eventType := corev1.EventTypeNormal
 		mostRecentCondition := cloned.Status.Conditions[len(cloned.Status.Conditions)-1]
 		c.recorder.Event(cloned, eventType, mostRecentCondition.Reason, mostRecentCondition.Message)
+
+		updated, err := c.clusteropClientsets.ClusteropV1alpha1().KubeletUpgrades().UpdateStatus(context.Background(), cloned, metav1.UpdateOptions{})
+		return updated, true, err
 	}
+
+	return nil, false, nil
+}
+
+// canUpgrade returns true if the KubeletUpgrade object satisfies all the
+// upgrade preconditions:
+// 1. the current system time is equal to or 5 minutes after the next scheduled
+//    time
+// 2. the KubeletUpgrade object isn't disabled
+func (c *Controller) canUpgrade(obj *clusteropv1alpha1.KubeletUpgrade, now *metav1.Time) bool {
+	return true
 }
 
 // enqueueMatchingNodes finds all the matching nodes of the KubeletUpgrade
 // object and add them to the workqueue.
 func (c *Controller) enqueueMatchingNodes(obj *clusteropv1alpha1.KubeletUpgrade, now *metav1.Time) error {
-	nextScheduledTime := obj.Status.NextScheduledTime
-	if now.Before(nextScheduledTime) || now.Equal(nextScheduledTime) {
-		selector, err := metav1.LabelSelectorAsSelector(obj.Spec.Selector)
-		if err != nil {
-			return err
-		}
-
-		// exclude control plane nodes
-		requirements, err := excludeRequirements()
-		if err != nil {
-			return err
-		}
-		selector = selector.Add(requirements...)
-
-		nodes, err := c.k8sInformers.Core().V1().Nodes().Lister().List(selector)
-		if err != nil {
-			return err
-		}
-
-		if len(nodes) == 0 {
-			klog.V(4).Infof("no matching nodes found for KubeletUpgrade %s", obj.GetName())
-			return nil
-		}
-
-		var errs []error
-		for _, node := range nodes {
-			if err := c.enqueueNode(node); err != nil {
-				errs = append(errs, err)
-				continue
-			}
-			klog.V(4).Infof("added node %s to workqueue of %s", node.GetName(), obj.GetName())
-		}
-
-		var final error
-		for _, err := range errs {
-			final = fmt.Errorf("%s\n%s", final, err)
-		}
-		return final
+	selector, err := metav1.LabelSelectorAsSelector(obj.Spec.Selector)
+	if err != nil {
+		return err
 	}
 
-	return nil
+	// exclude control plane nodes
+	requirements, err := excludeRequirements()
+	if err != nil {
+		return err
+	}
+	selector = selector.Add(requirements...)
+
+	nodes, err := c.k8sInformers.Core().V1().Nodes().Lister().List(selector)
+	if err != nil {
+		return err
+	}
+
+	if len(nodes) == 0 {
+		klog.V(4).Infof("no matching nodes found for %s", obj.GetName())
+		return nil
+	}
+
+	var errs []error
+	for _, node := range nodes {
+		if err := c.enqueueNode(node); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		klog.V(4).Infof("added node %s to workqueue", node.GetName())
+	}
+
+	var final error
+	for _, err := range errs {
+		final = fmt.Errorf("%s. %s", final, err)
+	}
+	return final
 }
 
 func (c *Controller) enqueueNode(obj interface{}) error {
@@ -281,6 +319,32 @@ func (c *Controller) enqueueNode(obj interface{}) error {
 	return nil
 }
 
+func (c *Controller) recordUpgradeStatus(obj *clusteropv1alpha1.KubeletUpgrade, status string, err error, now *metav1.Time) error {
+	var updated *clusteropv1alpha1.KubeletUpgrade
+	switch status {
+	case "completed":
+		updated = obj.RecordUpgradeCompleted(err, now)
+	case "started":
+		updated = obj.RecordUpgradeStarted(now)
+	default:
+		return fmt.Errorf("unsupported upgrade condition status: %s", status)
+	}
+
+	// broadcast event
+	eventType := corev1.EventTypeNormal
+	if err != nil {
+		eventType = corev1.EventTypeWarning
+	}
+	mostRecentCondition := updated.Status.Conditions[len(updated.Status.Conditions)-1]
+	c.recorder.Event(updated, eventType, mostRecentCondition.Reason, mostRecentCondition.Message)
+
+	if _, err := c.clusteropClientsets.ClusteropV1alpha1().KubeletUpgrades().UpdateStatus(context.Background(), updated, metav1.UpdateOptions{}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (c *Controller) startUpgrade(upgrade *clusteropv1alpha1.KubeletUpgrade) error {
 	var (
 		wg         = sync.WaitGroup{}
@@ -290,7 +354,6 @@ func (c *Controller) startUpgrade(upgrade *clusteropv1alpha1.KubeletUpgrade) err
 		errs       error
 	)
 
-	defer close(errChan)
 	go func() {
 		for err := range errChan {
 			errs = fmt.Errorf("%s. %s", errs, err)
@@ -306,6 +369,7 @@ func (c *Controller) startUpgrade(upgrade *clusteropv1alpha1.KubeletUpgrade) err
 			defer func() {
 				klog.Infof("terminating worker %d", numCurrent)
 				wg.Done()
+				close(errChan)
 			}()
 			errChan <- c.runWorker()
 		}()
@@ -359,7 +423,6 @@ func (c *Controller) upgradeKubelet(key string) *Result {
 		return result
 	}
 
-	klog.Infof("getting KubeletUpgrade obj %s", name)
 	obj, err := c.k8sInformers.Core().V1().Nodes().Lister().Get(name)
 	if err != nil {
 		result.Err = err

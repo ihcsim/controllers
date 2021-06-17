@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ihcsim/controllers/upgrade/kubelet/pkg/controller/labels"
 	"github.com/robfig/cron"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/klog/v2"
 )
 
 // +genclient
@@ -39,12 +41,13 @@ const (
 
 	ConditionReasonNextScheduledTimeStale = "next scheduled time was stale"
 
-	ConditionStatusPending   = "pending"
+	ConditionStatusStarted   = "started"
 	ConditionStatusCompleted = "completed"
 	ConditionStatusFailed    = "failed"
 
-	ConditionTypePoll    = "poll"
-	ConditionTypeUpgrade = "upgrade"
+	ConditionTypeUpdatedNextScheduledTime = "UpdatedNextScheduledTime"
+	ConditionTypeUpgradeStarted           = "UpgradeStarted"
+	ConditionTypeUpgradeCompleted         = "UpgradeCompleted"
 
 	UpgradeFailurePolicyStrict = "strict"
 	UpgradeFailurePolicyIgnore = "ignore"
@@ -85,7 +88,7 @@ func (k KubeletUpgrade) UpdateNextScheduledTime(now *metav1.Time) *KubeletUpgrad
 	cloned := k.DeepCopy()
 	condition := UpgradeCondition{
 		LastTransitionTime: now,
-		Type:               ConditionTypePoll,
+		Type:               ConditionTypeUpdatedNextScheduledTime,
 	}
 
 	schedule := cloned.Spec.Schedule
@@ -109,27 +112,56 @@ func (k KubeletUpgrade) UpdateNextScheduledTime(now *metav1.Time) *KubeletUpgrad
 
 // RecordUpgradeStarted makes a clone of the KubeletUpgrade and updates its
 // status with an "upgrade started" condition.
-func (k KubeletUpgrade) RecordUpgradeStarted(now *metav1.Time) *KubeletUpgrade {
+func (k KubeletUpgrade) RecordUpgradeStarted(now *metav1.Time) (*KubeletUpgrade, error) {
 	cloned := k.DeepCopy()
+
+	// add new label to show upgrade has started
+	requirements, err := labels.ExcludedKubeletUpgrade()
+	if err != nil {
+		return nil, err
+	}
+
+	if cloned.Labels == nil {
+		cloned.Labels = map[string]string{}
+	}
+
+	for _, requirement := range requirements {
+		cloned.Labels[requirement.Key()] = "true"
+	}
+
+	// add new condition
 	condition := UpgradeCondition{
 		LastTransitionTime: now,
-		Type:               ConditionTypeUpgrade,
+		Type:               ConditionTypeUpgradeStarted,
 	}
 
 	condition.Message = ConditionMessageUpgradeStarted
-	condition.Status = ConditionStatusCompleted
+	condition.Status = ConditionStatusStarted
 	cloned.Status.Conditions = append(cloned.Status.Conditions, condition)
 
-	return cloned
+	return cloned, nil
 }
 
 // RecordUpgradeStarted makes a clone of the KubeletUpgrade and updates its
 // status with an "upgrade completed" condition.
-func (k KubeletUpgrade) RecordUpgradeCompleted(err error, now *metav1.Time) *KubeletUpgrade {
+func (k KubeletUpgrade) RecordUpgradeCompleted(err error, now *metav1.Time) (*KubeletUpgrade, error) {
 	cloned := k.DeepCopy()
 	condition := UpgradeCondition{
 		LastTransitionTime: now,
-		Type:               ConditionTypeUpgrade,
+		Type:               ConditionTypeUpgradeCompleted,
+	}
+
+	// remove 'skip' label so that it will be processed in the next cycle
+	if cloned.Labels != nil {
+		requirements, err := labels.ExcludedKubeletUpgrade()
+		if err != nil {
+			return nil, err
+		}
+
+		klog.V(4).Infof("updating %s by removing labels: %s", cloned.GetName(), requirements)
+		for _, requirement := range requirements {
+			delete(cloned.Labels, requirement.Key())
+		}
 	}
 
 	condition.Message = ConditionMessageUpgradeCompleted
@@ -141,5 +173,5 @@ func (k KubeletUpgrade) RecordUpgradeCompleted(err error, now *metav1.Time) *Kub
 	}
 
 	cloned.Status.Conditions = append(cloned.Status.Conditions, condition)
-	return cloned
+	return cloned, nil
 }

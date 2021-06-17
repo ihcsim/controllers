@@ -10,5 +10,5 @@ spec:
     matchExpressions:
     - key: clusterop.isim.dev/kubelet-upgrade
       operator: In
-      values: ["replace-nodes-strict"]
+      values: ["retain-nodes-strict"]
   strategy: retain

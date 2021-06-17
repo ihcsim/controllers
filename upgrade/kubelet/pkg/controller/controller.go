@@ -46,9 +46,9 @@ type Controller struct {
 	// Kubernetes API.
 	recorder record.EventRecorder
 
-	// workqueue is a rate-limited queue that is used to process work
-	// asynchronously.
-	workqueue workqueue.RateLimitingInterface
+	// workqueues maps KubeletUpgrade object names to their rate-limited queues.
+	// The queues are used to store up nodes pending for kubelet upgrades.
+	workqueues map[string]workqueue.RateLimitingInterface
 }
 
 // New returns a new instance of the controller.
@@ -71,10 +71,6 @@ func New(
 		scheme.Scheme,
 		corev1.EventSource{Component: name})
 
-	workqueue := workqueue.NewNamedRateLimitingQueue(
-		workqueue.DefaultControllerRateLimiter(),
-		"kubeletUpgradeQueue")
-
 	var (
 		tickDuration   = time.Minute * 1
 		requestTimeout = time.Second * 30
@@ -88,7 +84,7 @@ func New(
 		ticker:              time.NewTicker(tickDuration),
 		tickDuration:        tickDuration,
 		requestTimeout:      requestTimeout,
-		workqueue:           workqueue,
+		workqueues:          map[string]workqueue.RateLimitingInterface{},
 		recorder:            recorder,
 	}
 
@@ -108,14 +104,15 @@ func New(
 	return c
 }
 
-// Run will set up the event handlers for our custom resources, as well as
-// syncing informer caches and starting workers. It will block until stopCh is
-// closed, at which point it will shutdown the workqueue and wait for
+// Run will start the informers and sync their cache. It will block until stop
+// is closed.
 func (c *Controller) Run(stop <-chan struct{}) error {
 	defer func() {
 		utilruntime.HandleCrash()
-		c.workqueue.ShutDown()
 		c.ticker.Stop()
+		for _, workqueue := range c.workqueues {
+			workqueue.ShutDown()
+		}
 	}()
 
 	c.k8sInformers.Start(stop)
@@ -219,7 +216,7 @@ func (c *Controller) poll(obj interface{}, now *metav1.Time) error {
 	}
 
 	// queue is empty; nothing to do
-	if c.workqueue.Len() == 0 {
+	if c.queue(upgrade).Len() == 0 {
 		return nil
 	}
 
@@ -262,8 +259,8 @@ func (c *Controller) canUpgrade(obj *clusteropv1alpha1.KubeletUpgrade, now *meta
 
 // enqueueMatchingNodes finds all the matching nodes of the KubeletUpgrade
 // object and add them to the workqueue.
-func (c *Controller) enqueueMatchingNodes(obj *clusteropv1alpha1.KubeletUpgrade) error {
-	selector, err := metav1.LabelSelectorAsSelector(obj.Spec.Selector)
+func (c *Controller) enqueueMatchingNodes(upgrade *clusteropv1alpha1.KubeletUpgrade) error {
+	selector, err := metav1.LabelSelectorAsSelector(upgrade.Spec.Selector)
 	if err != nil {
 		return err
 	}
@@ -274,7 +271,6 @@ func (c *Controller) enqueueMatchingNodes(obj *clusteropv1alpha1.KubeletUpgrade)
 		return err
 	}
 	selector = selector.Add(requirements...)
-
 	nodes, err := c.k8sInformers.Core().V1().Nodes().Lister().List(selector)
 	if err != nil {
 		return err
@@ -285,7 +281,7 @@ func (c *Controller) enqueueMatchingNodes(obj *clusteropv1alpha1.KubeletUpgrade)
 		nodeNames []string
 	)
 	for _, node := range nodes {
-		if err := c.enqueueNode(node); err != nil {
+		if err := c.enqueueNode(upgrade, node); err != nil {
 			errs = append(errs, err)
 			continue
 		}
@@ -293,7 +289,7 @@ func (c *Controller) enqueueMatchingNodes(obj *clusteropv1alpha1.KubeletUpgrade)
 	}
 
 	if len(nodeNames) > 0 {
-		klog.Infof("matching nodes found: %v (upgrade=%s)", strings.Join(nodeNames, ", "), obj.GetName())
+		klog.Infof("matching nodes found: %v (upgrade=%s)", strings.Join(nodeNames, ", "), upgrade.GetName())
 	}
 
 	var final error
@@ -303,7 +299,7 @@ func (c *Controller) enqueueMatchingNodes(obj *clusteropv1alpha1.KubeletUpgrade)
 	return final
 }
 
-func (c *Controller) enqueueNode(obj interface{}) error {
+func (c *Controller) enqueueNode(upgrade *clusteropv1alpha1.KubeletUpgrade, obj interface{}) error {
 	key, err := cache.MetaNamespaceKeyFunc(obj)
 	if err != nil {
 		return err
@@ -313,7 +309,7 @@ func (c *Controller) enqueueNode(obj interface{}) error {
 		return fmt.Errorf("failed to enqueue node %s due to wrong type %T", key, key)
 	}
 
-	c.workqueue.Add(key)
+	c.queue(upgrade).Add(key)
 	return nil
 }
 
@@ -395,9 +391,10 @@ func (c *Controller) startUpgrade(upgrade *clusteropv1alpha1.KubeletUpgrade) err
 	)
 
 	// essentially, we want number of workers to be
-	// min(maxUnavailable, len(workqueue))
-	if c.workqueue.Len() < numWorkers {
-		numWorkers = c.workqueue.Len()
+	// min(maxUnavailable, len(queue))
+	queue := c.queue(upgrade)
+	if queue.Len() < numWorkers {
+		numWorkers = queue.Len()
 	}
 
 	// gather errors from all the workers
@@ -430,7 +427,7 @@ func (c *Controller) startUpgrade(upgrade *clusteropv1alpha1.KubeletUpgrade) err
 	}()
 
 	wg := sync.WaitGroup{}
-	for i := 0; i < c.workqueue.Len(); i++ {
+	for i := 0; i < queue.Len(); i++ {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
@@ -443,20 +440,31 @@ func (c *Controller) startUpgrade(upgrade *clusteropv1alpha1.KubeletUpgrade) err
 	return errs
 }
 
+func (c *Controller) queue(upgrade *clusteropv1alpha1.KubeletUpgrade) workqueue.RateLimitingInterface {
+	if c.workqueues[upgrade.GetName()] == nil {
+		c.workqueues[upgrade.GetName()] = workqueue.NewNamedRateLimitingQueue(
+			workqueue.DefaultControllerRateLimiter(),
+			upgrade.GetName())
+	}
+
+	return c.workqueues[upgrade.GetName()]
+}
+
 // runWorker starts a worker to dequeue a node name from the controller's
 // workqueue, and then upgrade the node's kubelet.
 func (c *Controller) runWorker(workerID int, upgrade *clusteropv1alpha1.KubeletUpgrade) error {
-	obj, shutdown := c.workqueue.Get()
+	queue := c.queue(upgrade)
+	obj, shutdown := queue.Get()
 	if shutdown {
 		return nil
 	}
-	defer c.workqueue.Done(obj)
+	defer queue.Done(obj)
 
 	// obj must be a string of the form namespace/name, per enqueueNode().
 	// if it isn't, remove it from workqueue by calling Forget().
 	key, ok := obj.(string)
 	if !ok {
-		c.workqueue.Forget(obj)
+		queue.Forget(obj)
 		return fmt.Errorf("unsupported workqueue key type %T. node: %v (upgrade=%s,worker=#%d)", obj, obj, upgrade.GetName(), workerID)
 	}
 
@@ -469,7 +477,7 @@ func (c *Controller) runWorker(workerID int, upgrade *clusteropv1alpha1.KubeletU
 
 		// re-queue node object for retries if error is transient
 		if result.Retry {
-			c.workqueue.AddRateLimited(key)
+			queue.AddRateLimited(key)
 		}
 
 		return fmt.Errorf("failed to upgrade node %s: %s (upgrade=%s,worker=#%d)", key, result.Err, upgrade.GetName(), workerID)

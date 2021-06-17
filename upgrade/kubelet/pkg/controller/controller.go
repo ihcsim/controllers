@@ -202,7 +202,7 @@ func (c *Controller) poll(obj interface{}, now time.Time) error {
 		return fmt.Errorf("failed to poll %s: unrecognized type %T", obj, obj)
 	}
 
-	updatedClone, err := c.updateNextScheduledTime(upgrade, now)
+	updatedClone, err := c.updateNextScheduledTime(upgrade, now, false)
 	if err != nil {
 		return err
 	}
@@ -234,20 +234,22 @@ func (c *Controller) poll(obj interface{}, now time.Time) error {
 // updateNextScheduledTime updates the "next schedule time" property of the
 // KubeletConfig obj status, and broadcast an event showing the result of the
 // update.
-func (c *Controller) updateNextScheduledTime(obj *clusteropv1alpha1.KubeletUpgrade, now time.Time) (*clusteropv1alpha1.KubeletUpgrade, error) {
+func (c *Controller) updateNextScheduledTime(obj *clusteropv1alpha1.KubeletUpgrade, now time.Time, forceUpdate bool) (*clusteropv1alpha1.KubeletUpgrade, error) {
 	next := obj.Status.NextScheduledTime.Time
-	if !next.IsZero() && !next.Before(now) {
-		return obj, nil
+	// account for the 5-minutes look-back window
+	if next.IsZero() || forceUpdate || (next.Before(now) && now.Sub(next) >= time.Minute*5) {
+		cloned := obj.UpdateNextScheduledTime(now)
+
+		// broadcast event
+		eventType := corev1.EventTypeNormal
+		mostRecentCondition := cloned.Status.Conditions[len(cloned.Status.Conditions)-1]
+		c.recorder.Event(cloned, eventType, mostRecentCondition.Reason, mostRecentCondition.Message)
+
+		return c.clusteropClientsets.ClusteropV1alpha1().KubeletUpgrades().UpdateStatus(context.Background(), cloned, metav1.UpdateOptions{})
 	}
 
-	cloned := obj.UpdateNextScheduledTime(now)
-
-	// broadcast event
-	eventType := corev1.EventTypeNormal
-	mostRecentCondition := cloned.Status.Conditions[len(cloned.Status.Conditions)-1]
-	c.recorder.Event(cloned, eventType, mostRecentCondition.Reason, mostRecentCondition.Message)
-
-	return c.clusteropClientsets.ClusteropV1alpha1().KubeletUpgrades().UpdateStatus(context.Background(), cloned, metav1.UpdateOptions{})
+	// no changes
+	return obj, nil
 }
 
 // canUpgrade returns true if the KubeletUpgrade object satisfies all the
@@ -267,8 +269,8 @@ func (c *Controller) canUpgrade(obj *clusteropv1alpha1.KubeletUpgrade, now time.
 		}
 	}
 
-	after := next.Add(time.Minute * 5)
-	if now.Equal(next) || (now.After(next) && now.Before(after)) {
+	// look-back 5 minutes to see if any upgrades were missed
+	if now.Equal(next) || (now.Sub(next) <= time.Minute*5 && now.Sub(next) >= 0) {
 		return true, ""
 	}
 
@@ -439,6 +441,10 @@ func (c *Controller) startUpgrade(obj *clusteropv1alpha1.KubeletUpgrade, now tim
 		updatedClone, err = c.recordUpgradeStatus(updatedClone, "completed", errs, endTime)
 		if err != nil {
 			utilruntime.HandleError(fmt.Errorf("failed to update condition: %s (upgrade=%s)", err, updatedClone.GetName()))
+		}
+
+		if _, err := c.updateNextScheduledTime(updatedClone, now, true); err != nil {
+			utilruntime.HandleError(fmt.Errorf("failed to update next scheduled time: %s (upgrade=%s)", err, updatedClone.GetName()))
 		}
 	}()
 

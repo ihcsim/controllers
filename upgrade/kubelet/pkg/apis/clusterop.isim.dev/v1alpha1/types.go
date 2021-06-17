@@ -35,7 +35,7 @@ type KubeletUpgradeSpec struct {
 }
 
 const (
-	ConditionMessageUpdateNextScheduleTime = "updated next schedule time"
+	ConditionMessageUpdateNextScheduleTime = "updated next schedule time to %s"
 	ConditionMessageUpgradeStarted         = "started kubelet upgrade"
 	ConditionMessageUpgradeCompleted       = "completed kubelet upgrade"
 
@@ -60,16 +60,16 @@ const (
 type KubeletUpgradeStatus struct {
 	Conditions        []UpgradeCondition `json:"conditions"`
 	KubeletVersion    string             `json:"kubeletVersion"`
-	NextScheduledTime *metav1.Time       `json:"nextScheduledTime"`
+	NextScheduledTime metav1.Time        `json:"nextScheduledTime"`
 }
 
 // UpgradeCondition shows the observed condition of an upgrade.
 type UpgradeCondition struct {
-	LastTransitionTime *metav1.Time `json:"lastTransitionTime"`
-	Message            string       `json:"message"`
-	Reason             string       `json:"reason"`
-	Status             string       `json:"status"`
-	Type               string       `json:"type"`
+	LastTransitionTime metav1.Time `json:"lastTransitionTime"`
+	Message            string      `json:"message"`
+	Reason             string      `json:"reason"`
+	Status             string      `json:"status"`
+	Type               string      `json:"type"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -84,10 +84,10 @@ type KubeletUpgradeList struct {
 
 // UpdateNextScheduledTime makes a clone of the KubeletUpgrade object and
 // updates its next scheduled time.
-func (k KubeletUpgrade) UpdateNextScheduledTime(now *metav1.Time) *KubeletUpgrade {
+func (k KubeletUpgrade) UpdateNextScheduledTime(now time.Time) *KubeletUpgrade {
 	cloned := k.DeepCopy()
 	condition := UpgradeCondition{
-		LastTransitionTime: now,
+		LastTransitionTime: metav1.NewTime(now),
 		Type:               ConditionTypeUpdatedNextScheduledTime,
 	}
 
@@ -99,10 +99,10 @@ func (k KubeletUpgrade) UpdateNextScheduledTime(now *metav1.Time) *KubeletUpgrad
 		return cloned
 	}
 
-	nextScheduledTime := metav1.NewTime(cronSpec.Next(time.Now()))
-	cloned.Status.NextScheduledTime = &nextScheduledTime
+	nextScheduledTime := metav1.NewTime(cronSpec.Next(now))
+	cloned.Status.NextScheduledTime = nextScheduledTime
 
-	condition.Message = ConditionMessageUpdateNextScheduleTime
+	condition.Message = fmt.Sprintf(ConditionMessageUpdateNextScheduleTime, nextScheduledTime.UTC())
 	condition.Reason = ConditionReasonNextScheduledTimeStale
 	condition.Status = ConditionStatusCompleted
 	cloned.Status.Conditions = append(cloned.Status.Conditions, condition)
@@ -112,7 +112,7 @@ func (k KubeletUpgrade) UpdateNextScheduledTime(now *metav1.Time) *KubeletUpgrad
 
 // RecordUpgradeStarted makes a clone of the KubeletUpgrade and updates its
 // status with an "upgrade started" condition.
-func (k KubeletUpgrade) RecordUpgradeStarted(now *metav1.Time) (*KubeletUpgrade, error) {
+func (k KubeletUpgrade) RecordUpgradeStarted(now time.Time) (*KubeletUpgrade, error) {
 	cloned := k.DeepCopy()
 
 	// add new label to show upgrade has started
@@ -131,7 +131,7 @@ func (k KubeletUpgrade) RecordUpgradeStarted(now *metav1.Time) (*KubeletUpgrade,
 
 	// add new condition
 	condition := UpgradeCondition{
-		LastTransitionTime: now,
+		LastTransitionTime: metav1.NewTime(now),
 		Type:               ConditionTypeUpgradeStarted,
 	}
 
@@ -144,10 +144,10 @@ func (k KubeletUpgrade) RecordUpgradeStarted(now *metav1.Time) (*KubeletUpgrade,
 
 // RecordUpgradeStarted makes a clone of the KubeletUpgrade and updates its
 // status with an "upgrade completed" condition.
-func (k KubeletUpgrade) RecordUpgradeCompleted(err error, now *metav1.Time) (*KubeletUpgrade, error) {
+func (k KubeletUpgrade) RecordUpgradeCompleted(err error, now time.Time) (*KubeletUpgrade, error) {
 	cloned := k.DeepCopy()
 	condition := UpgradeCondition{
-		LastTransitionTime: now,
+		LastTransitionTime: metav1.NewTime(now),
 		Type:               ConditionTypeUpgradeCompleted,
 	}
 

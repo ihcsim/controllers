@@ -5,7 +5,7 @@ metadata:
 spec:
   failurePolicy: strict
   maxUnavailable: 1
-  schedule: "@weekly"
+  schedule: "@every 10m"
   selector:
     matchExpressions:
     - key: clusterop.isim.dev/kubelet-upgrade

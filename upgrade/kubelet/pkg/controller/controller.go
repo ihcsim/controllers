@@ -95,8 +95,8 @@ func New(
 	clusteropInformers.Clusterop().V1alpha1().KubeletUpgrades().Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				now := metav1.Now()
-				c.poll(obj, &now)
+				now := time.Now()
+				c.poll(obj, now)
 			},
 		},
 	)
@@ -175,10 +175,10 @@ func (c *Controller) pollSchedules() error {
 	}
 
 	var errs []error
-	now := metav1.Now()
+	now := time.Now()
 	for _, upgrade := range upgrades {
 		// blocking calls to ensure stable, predictable sequential upgrade
-		if err := c.poll(upgrade, &now); err != nil {
+		if err := c.poll(upgrade, now); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -191,7 +191,7 @@ func (c *Controller) pollSchedules() error {
 	return final
 }
 
-func (c *Controller) poll(obj interface{}, now *metav1.Time) error {
+func (c *Controller) poll(obj interface{}, now time.Time) error {
 	if !c.clusteropInformers.Clusterop().V1alpha1().KubeletUpgrades().Informer().HasSynced() ||
 		!c.k8sInformers.Core().V1().Nodes().Informer().HasSynced() {
 		return nil
@@ -207,7 +207,9 @@ func (c *Controller) poll(obj interface{}, now *metav1.Time) error {
 		return err
 	}
 
-	if !c.canUpgrade(updatedClone, now) {
+	proceed, reason := c.canUpgrade(updatedClone, now)
+	if !proceed {
+		klog.Infof("skipping upgrade (upgrade=%s,reason=%s)", updatedClone.GetName(), reason)
 		return nil
 	}
 
@@ -223,7 +225,7 @@ func (c *Controller) poll(obj interface{}, now *metav1.Time) error {
 	errChan := make(chan error)
 	go func() {
 		defer close(errChan)
-		errChan <- c.startUpgrade(updatedClone)
+		errChan <- c.startUpgrade(updatedClone, now)
 	}()
 
 	return <-errChan
@@ -232,9 +234,9 @@ func (c *Controller) poll(obj interface{}, now *metav1.Time) error {
 // updateNextScheduledTime updates the "next schedule time" property of the
 // KubeletConfig obj status, and broadcast an event showing the result of the
 // update.
-func (c *Controller) updateNextScheduledTime(obj *clusteropv1alpha1.KubeletUpgrade, now *metav1.Time) (*clusteropv1alpha1.KubeletUpgrade, error) {
-	nextScheduledTime := obj.Status.NextScheduledTime
-	if !nextScheduledTime.IsZero() && now.Before(nextScheduledTime) {
+func (c *Controller) updateNextScheduledTime(obj *clusteropv1alpha1.KubeletUpgrade, now time.Time) (*clusteropv1alpha1.KubeletUpgrade, error) {
+	next := obj.Status.NextScheduledTime.Time
+	if !next.IsZero() && !next.Before(now) {
 		return obj, nil
 	}
 
@@ -250,12 +252,27 @@ func (c *Controller) updateNextScheduledTime(obj *clusteropv1alpha1.KubeletUpgra
 
 // canUpgrade returns true if the KubeletUpgrade object satisfies all the
 // upgrade preconditions:
-// 1. the current system time is equal to or 5 minutes after the next scheduled
+// 1. the KubeletUpgrade object isn't disabled
+// 2. the current system time is equal to or 5 minutes after the next scheduled
 //    time
-// 2. the KubeletUpgrade object isn't disabled
-func (c *Controller) canUpgrade(obj *clusteropv1alpha1.KubeletUpgrade, now *metav1.Time) bool {
+func (c *Controller) canUpgrade(obj *clusteropv1alpha1.KubeletUpgrade, now time.Time) (bool, string) {
+	next := obj.Status.NextScheduledTime.Time
+	if next.IsZero() {
+		return false, "next scheduled time shouldn't be empty"
+	}
 
-	return true
+	if obj.Labels != nil {
+		if _, exists := obj.Labels[labels.KeyKubeletUpgradeSkip]; exists {
+			return false, "has skip label"
+		}
+	}
+
+	after := next.Add(time.Minute * 5)
+	if now.Equal(next) || (now.After(next) && now.Before(after)) {
+		return true, ""
+	}
+
+	return false, fmt.Sprintf("next scheduled time is %s", next.UTC())
 }
 
 // enqueueMatchingNodes finds all the matching nodes of the KubeletUpgrade
@@ -318,7 +335,7 @@ func (c *Controller) recordUpgradeStatus(
 	obj *clusteropv1alpha1.KubeletUpgrade,
 	status string,
 	resultErr error,
-	now *metav1.Time) (*clusteropv1alpha1.KubeletUpgrade, error) {
+	now time.Time) (*clusteropv1alpha1.KubeletUpgrade, error) {
 
 	var (
 		updatedClone *clusteropv1alpha1.KubeletUpgrade
@@ -384,7 +401,7 @@ func (c *Controller) recordUpgradeStatus(
 // startUpgrade commences the kubelets upgrade process based on the spec of the
 // KubeletUpgrade object. It remained blocked until all the kubelets are
 // upgraded.
-func (c *Controller) startUpgrade(obj *clusteropv1alpha1.KubeletUpgrade) error {
+func (c *Controller) startUpgrade(obj *clusteropv1alpha1.KubeletUpgrade, now time.Time) error {
 	var (
 		numWorkers = obj.Spec.MaxUnavailable
 		errChan    = make(chan error, numWorkers)
@@ -407,23 +424,21 @@ func (c *Controller) startUpgrade(obj *clusteropv1alpha1.KubeletUpgrade) error {
 		}
 	}()
 
-	var (
-		cloned = obj.DeepCopy()
-		now    = metav1.Now()
-	)
+	cloned := obj.DeepCopy()
 
 	// record the 'start upgrade' condition
-	updatedClone, err := c.recordUpgradeStatus(cloned, "started", nil, &now)
+	updatedClone, err := c.recordUpgradeStatus(cloned, "started", nil, now)
 	if err != nil {
 		// ok to continue
-		utilruntime.HandleError(fmt.Errorf("failed to update %s condition: %s", cloned.GetName(), err))
+		utilruntime.HandleError(fmt.Errorf("failed to update condition: %s (upgrade=%s)", err, cloned.GetName()))
 	}
 
 	// defer recording the 'end upgrade' condition
 	defer func() {
-		endTime := metav1.Now()
-		if _, err := c.recordUpgradeStatus(updatedClone, "completed", errs, &endTime); err != nil {
-			utilruntime.HandleError(fmt.Errorf("failed to update %s condition: %s", updatedClone.GetName(), err))
+		endTime := time.Now()
+		updatedClone, err = c.recordUpgradeStatus(updatedClone, "completed", errs, endTime)
+		if err != nil {
+			utilruntime.HandleError(fmt.Errorf("failed to update condition: %s (upgrade=%s)", err, updatedClone.GetName()))
 		}
 	}()
 

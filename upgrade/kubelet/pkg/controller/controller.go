@@ -254,13 +254,14 @@ func (c *Controller) updateNextScheduledTime(obj *clusteropv1alpha1.KubeletUpgra
 //    time
 // 2. the KubeletUpgrade object isn't disabled
 func (c *Controller) canUpgrade(obj *clusteropv1alpha1.KubeletUpgrade, now *metav1.Time) bool {
+
 	return true
 }
 
 // enqueueMatchingNodes finds all the matching nodes of the KubeletUpgrade
 // object and add them to the workqueue.
-func (c *Controller) enqueueMatchingNodes(upgrade *clusteropv1alpha1.KubeletUpgrade) error {
-	selector, err := metav1.LabelSelectorAsSelector(upgrade.Spec.Selector)
+func (c *Controller) enqueueMatchingNodes(obj *clusteropv1alpha1.KubeletUpgrade) error {
+	selector, err := metav1.LabelSelectorAsSelector(obj.Spec.Selector)
 	if err != nil {
 		return err
 	}
@@ -281,7 +282,7 @@ func (c *Controller) enqueueMatchingNodes(upgrade *clusteropv1alpha1.KubeletUpgr
 		nodeNames []string
 	)
 	for _, node := range nodes {
-		if err := c.enqueueNode(upgrade, node); err != nil {
+		if err := c.enqueueNode(obj, node); err != nil {
 			errs = append(errs, err)
 			continue
 		}
@@ -289,7 +290,7 @@ func (c *Controller) enqueueMatchingNodes(upgrade *clusteropv1alpha1.KubeletUpgr
 	}
 
 	if len(nodeNames) > 0 {
-		klog.Infof("matching nodes found: %v (upgrade=%s)", strings.Join(nodeNames, ", "), upgrade.GetName())
+		klog.Infof("matching nodes found: %v (upgrade=%s)", strings.Join(nodeNames, ", "), obj.GetName())
 	}
 
 	var final error
@@ -383,16 +384,16 @@ func (c *Controller) recordUpgradeStatus(
 // startUpgrade commences the kubelets upgrade process based on the spec of the
 // KubeletUpgrade object. It remained blocked until all the kubelets are
 // upgraded.
-func (c *Controller) startUpgrade(upgrade *clusteropv1alpha1.KubeletUpgrade) error {
+func (c *Controller) startUpgrade(obj *clusteropv1alpha1.KubeletUpgrade) error {
 	var (
-		numWorkers = upgrade.Spec.MaxUnavailable
+		numWorkers = obj.Spec.MaxUnavailable
 		errChan    = make(chan error, numWorkers)
 		errs       error
 	)
 
 	// essentially, we want number of workers to be
 	// min(maxUnavailable, len(queue))
-	queue := c.queue(upgrade)
+	queue := c.queue(obj)
 	if queue.Len() < numWorkers {
 		numWorkers = queue.Len()
 	}
@@ -407,7 +408,7 @@ func (c *Controller) startUpgrade(upgrade *clusteropv1alpha1.KubeletUpgrade) err
 	}()
 
 	var (
-		cloned = upgrade.DeepCopy()
+		cloned = obj.DeepCopy()
 		now    = metav1.Now()
 	)
 
@@ -440,14 +441,14 @@ func (c *Controller) startUpgrade(upgrade *clusteropv1alpha1.KubeletUpgrade) err
 	return errs
 }
 
-func (c *Controller) queue(upgrade *clusteropv1alpha1.KubeletUpgrade) workqueue.RateLimitingInterface {
-	if c.workqueues[upgrade.GetName()] == nil {
-		c.workqueues[upgrade.GetName()] = workqueue.NewNamedRateLimitingQueue(
+func (c *Controller) queue(obj *clusteropv1alpha1.KubeletUpgrade) workqueue.RateLimitingInterface {
+	if c.workqueues[obj.GetName()] == nil {
+		c.workqueues[obj.GetName()] = workqueue.NewNamedRateLimitingQueue(
 			workqueue.DefaultControllerRateLimiter(),
-			upgrade.GetName())
+			obj.GetName())
 	}
 
-	return c.workqueues[upgrade.GetName()]
+	return c.workqueues[obj.GetName()]
 }
 
 // runWorker starts a worker to dequeue a node name from the controller's

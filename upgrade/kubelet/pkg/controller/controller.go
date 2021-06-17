@@ -209,7 +209,7 @@ func (c *Controller) poll(obj interface{}, now time.Time) error {
 
 	proceed, reason := c.canUpgrade(updatedClone, now)
 	if !proceed {
-		klog.Infof("skipping upgrade (upgrade=%s,reason=%s)", updatedClone.GetName(), reason)
+		klog.V(4).Infof("skipping upgrade (upgrade=%s,reason=%s)", updatedClone.GetName(), reason)
 		return nil
 	}
 
@@ -491,7 +491,7 @@ func (c *Controller) runWorker(workerID int, upgrade *clusteropv1alpha1.KubeletU
 	}
 
 	klog.Infof("upgrading node %s (upgrade=%s,worker=#%d)", key, upgrade.GetName(), workerID)
-	if result := c.upgradeKubelet(key); result.Err != nil {
+	if result := c.upgradeKubelet(key, upgrade); result.Err != nil {
 		if errors.IsNotFound(result.Err) {
 			klog.Infof("node %s no longer exists", key)
 			return nil
@@ -509,7 +509,7 @@ func (c *Controller) runWorker(workerID int, upgrade *clusteropv1alpha1.KubeletU
 	return nil
 }
 
-func (c *Controller) upgradeKubelet(key string) *Result {
+func (c *Controller) upgradeKubelet(key string, upgrade *clusteropv1alpha1.KubeletUpgrade) *Result {
 	result := &Result{}
 
 	// convert the namespace/name key into its distinct namespace and name
@@ -519,14 +519,40 @@ func (c *Controller) upgradeKubelet(key string) *Result {
 		return result
 	}
 
-	obj, err := c.k8sInformers.Core().V1().Nodes().Lister().Get(name)
+	node, err := c.k8sInformers.Core().V1().Nodes().Lister().Get(name)
 	if err != nil {
 		result.Err = err
 		return result
 	}
 
-	if obj == nil {
+	updatedClone, err := c.cordonNode(true, *node, upgrade)
+	if err != nil {
+		result.Err = err
+		return result
+	}
+
+	if _, err := c.cordonNode(false, *updatedClone, upgrade); err != nil {
+		result.Err = err
+		return result
 	}
 
 	return result
+}
+
+// cordonNode creates a clone of node and marks it as unschedulable, if the cordon
+// flag is set to true. Othewise, it marks the node as schedulable.
+func (c *Controller) cordonNode(cordon bool, node corev1.Node, upgrade *clusteropv1alpha1.KubeletUpgrade) (*corev1.Node, error) {
+	action := "uncordoning"
+	if cordon {
+		action = "cordoning"
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), c.requestTimeout)
+	defer cancel()
+
+	klog.Infof("%s node (upgrade=%s,node=%s)", action, upgrade.GetName(), node.GetName())
+
+	cloned := node.DeepCopy()
+	cloned.Spec.Unschedulable = cordon
+	return c.k8sClientsets.CoreV1().Nodes().Update(ctx, cloned, metav1.UpdateOptions{})
 }

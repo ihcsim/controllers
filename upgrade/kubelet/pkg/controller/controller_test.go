@@ -24,9 +24,11 @@ import (
 )
 
 var (
-	binDir         = "../../../bin"
-	crdDir         = "../../../kubelet/yaml/crd"
-	testEnvDebug   = false
+	binDir       = "../../../bin"
+	crdDir       = "../../../kubelet/yaml/crd"
+	testEnvDebug = false
+	stop         = make(chan struct{})
+
 	testController *Controller
 	fakeRecorder   *record.FakeRecorder
 )
@@ -41,9 +43,15 @@ func TestMain(m *testing.M) {
 	defer func() {
 		envtest.Stop()
 		close(fakeRecorder.Events)
+		close(stop)
 	}()
 
 	if err := initTestController(k8sconfig); err != nil {
+		log.Println(err)
+		os.Exit(1)
+	}
+
+	if err := syncTestControllerCache(stop); err != nil {
 		log.Println(err)
 		os.Exit(1)
 	}
@@ -71,6 +79,12 @@ func initTestController(k8sconfig *rest.Config) error {
 	return nil
 }
 
+func syncTestControllerCache(stop <-chan struct{}) error {
+	testController.k8sInformers.Start(stop)
+	testController.clusteropInformers.Start(stop)
+	return testController.syncCache(stop)
+}
+
 func TestUpdateNextScheduledTime(t *testing.T) {
 	type testCase struct {
 		now               time.Time
@@ -83,7 +97,7 @@ func TestUpdateNextScheduledTime(t *testing.T) {
 
 	// call this function to test and assert a test case
 	assertTestCase := func(tc testCase, objName string) {
-		created, err := applyTestObj(objName, "@every 5m", tc.updateStatus, tc.nextScheduledTime, nil)
+		created, err := applyTestKubeletUpgrade(objName, "@every 5m", tc.updateStatus, tc.nextScheduledTime, nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %s", err)
 		}
@@ -223,7 +237,7 @@ func TestCanUpgrade(t *testing.T) {
 
 		// call this function to test and assert a test case
 		assertTestCase := func(tc testCase, objName string) {
-			created, err := applyTestObj(objName, "@every 5m", false, time.Time{}, tc.labels)
+			created, err := applyTestKubeletUpgrade(objName, "@every 5m", false, time.Time{}, tc.labels)
 			if err != nil {
 				t.Fatalf("unexpected error: %s", err)
 			}
@@ -269,7 +283,7 @@ func TestCanUpgrade(t *testing.T) {
 
 		// call this function to test and assert a test case
 		assertTestCase := func(tc testCase, objName string) {
-			created, err := applyTestObj(objName, "@every 5m", tc.updateStatus, tc.nextScheduledTime, nil)
+			created, err := applyTestKubeletUpgrade(objName, "@every 5m", tc.updateStatus, tc.nextScheduledTime, nil)
 			if err != nil {
 				t.Fatalf("unexpected error: %s", err)
 			}
@@ -387,7 +401,122 @@ func TestCanUpgrade(t *testing.T) {
 	})
 }
 
-func applyTestObj(name, schedule string, updateStatus bool, nextScheduledTime time.Time, labels map[string]string) (*clusteropv1alpha1.KubeletUpgrade, error) {
+func TestEnqueueMatchingNodes(t *testing.T) {
+	var testCases = []struct {
+		name          string
+		selector      metav1.LabelSelector
+		expectedNodes []string
+	}{
+		{
+			name: "kubelet-upgrade-node-pool-0",
+			selector: metav1.LabelSelector{
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					{
+						Key:      "node-pool",
+						Operator: metav1.LabelSelectorOpIn,
+						Values:   []string{"0"},
+					},
+				},
+			},
+			expectedNodes: []string{"worker-0", "worker-1"},
+		},
+		{
+			name: "kubelet-upgrade-node-pool-1",
+			selector: metav1.LabelSelector{
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					{
+						Key:      "node-pool",
+						Operator: metav1.LabelSelectorOpIn,
+						Values:   []string{"1"},
+					},
+				},
+			},
+			expectedNodes: []string{"worker-2"},
+		},
+		{
+			name: "kubelet-upgrade-node-pool-2",
+			selector: metav1.LabelSelector{
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					{
+						Key:      "node-pool",
+						Operator: metav1.LabelSelectorOpIn,
+						Values:   []string{"2"},
+					},
+				},
+			},
+			expectedNodes: []string{"worker-3"},
+		},
+	}
+
+	if err := applyTestNodes(); err != nil {
+		t.Fatal("unexpected error: ", err)
+	}
+
+	for _, tc := range testCases {
+		obj := &clusteropv1alpha1.KubeletUpgrade{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: tc.name,
+			},
+			Spec: clusteropv1alpha1.KubeletUpgradeSpec{
+				Selector: tc.selector,
+			},
+		}
+
+		if err := testController.enqueueMatchingNodes(obj); err != nil {
+			t.Fatal("unexpected error: ", err)
+		}
+	}
+
+	numNodePools := 3
+	if len(testController.workqueues) != numNodePools {
+		t.Fatalf("expected number of workqueues to be %d, but got %d", numNodePools, len(testController.workqueues))
+	}
+
+	// dequeue nodes from queue and store them in 'actuals'
+	actuals := map[string][]string{}
+	for i := 0; i < numNodePools; i++ {
+		kubeletUpgrade := fmt.Sprintf("kubelet-upgrade-node-pool-%d", i)
+		if _, exists := actuals[kubeletUpgrade]; !exists {
+			actuals[kubeletUpgrade] = []string{}
+		}
+
+		workqueue, exists := testController.workqueues[kubeletUpgrade]
+		if !exists {
+			t.Errorf("expected workqueue for obj %s to exist", kubeletUpgrade)
+		}
+
+		count := workqueue.Len()
+		for j := 0; j < count; j++ {
+			node, _ := workqueue.Get()
+			actuals[kubeletUpgrade] = append(actuals[kubeletUpgrade], node.(string))
+			workqueue.Done(node)
+		}
+	}
+
+	// test assertion
+	for _, tc := range testCases {
+		actualNodes, exists := actuals[tc.name]
+		if !exists {
+			t.Fatalf("expected nodes to exist (upgrade=%s)", tc.name)
+		}
+
+		var found bool
+		for _, expected := range tc.expectedNodes {
+			for _, actual := range actualNodes {
+				if expected == actual {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				t.Errorf("expected node %s to exist in queue (upgrade=%s)", expected, tc.name)
+			}
+		}
+	}
+}
+
+func applyTestKubeletUpgrade(name, schedule string, updateStatus bool, nextScheduledTime time.Time, labels map[string]string) (*clusteropv1alpha1.KubeletUpgrade, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), testController.requestTimeout)
 	defer cancel()
 
@@ -409,4 +538,58 @@ func applyTestObj(name, schedule string, updateStatus bool, nextScheduledTime ti
 	clusteropv1alpha1testing.WithStatusConditions(created, conditions)
 	clusteropv1alpha1testing.WithNextScheduledTime(created, nextScheduledTime)
 	return testController.clusteropClientsets.ClusteropV1alpha1().KubeletUpgrades().UpdateStatus(ctx, created, metav1.UpdateOptions{})
+}
+
+func applyTestNodes() error {
+	var nodes = []struct {
+		name   string
+		labels map[string]string
+	}{
+		{
+			name:   "control-plane-0",
+			labels: map[string]string{"node-role.kubernetes.io/control-plane": ""},
+		},
+		{
+			name:   "control-plane-1",
+			labels: map[string]string{"node-role.kubernetes.io/control-plane": ""},
+		},
+		{
+			name:   "control-plane-2",
+			labels: map[string]string{"node-role.kubernetes.io/master": ""},
+		},
+		{
+			name:   "worker-0",
+			labels: map[string]string{"node-pool": "0"},
+		},
+		{
+			name:   "worker-1",
+			labels: map[string]string{"node-pool": "0"},
+		},
+		{
+			name:   "worker-2",
+			labels: map[string]string{"node-pool": "1"},
+		},
+		{
+			name:   "worker-3",
+			labels: map[string]string{"node-pool": "2"},
+		},
+	}
+
+	for _, node := range nodes {
+		if _, err := applyTestNode(node.name, node.labels); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func applyTestNode(name string, labels map[string]string) (*corev1.Node, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), testController.requestTimeout)
+	defer cancel()
+
+	// create the object
+	obj := clusteropv1alpha1testing.NewNode(name)
+	clusteropv1alpha1testing.NodeWithLabels(obj, labels)
+	return testController.k8sClientsets.CoreV1().Nodes().Create(ctx, obj, metav1.CreateOptions{})
 }

@@ -500,8 +500,8 @@ func TestEnqueueMatchingNodes(t *testing.T) {
 			t.Fatalf("expected nodes to exist (upgrade=%s)", tc.name)
 		}
 
-		var found bool
 		for _, expected := range tc.expectedNodes {
+			var found bool
 			for _, actual := range actualNodes {
 				if expected == actual {
 					found = true

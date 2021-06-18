@@ -258,15 +258,15 @@ func (c *Controller) updateNextScheduledTime(obj *clusteropv1alpha1.KubeletUpgra
 // 2. the current system time is equal to or 5 minutes after the next scheduled
 //    time
 func (c *Controller) canUpgrade(obj *clusteropv1alpha1.KubeletUpgrade, now time.Time) (bool, string) {
-	next := obj.Status.NextScheduledTime.Time
-	if next.IsZero() {
-		return false, "next scheduled time shouldn't be empty"
-	}
-
 	if obj.Labels != nil {
 		if _, exists := obj.Labels[labels.KeyKubeletUpgradeSkip]; exists {
 			return false, "has skip label"
 		}
+	}
+
+	next := obj.Status.NextScheduledTime.Time
+	if next.IsZero() {
+		return false, "next scheduled time shouldn't be empty"
 	}
 
 	// look-back 5 minutes to see if any upgrades were missed
@@ -280,7 +280,7 @@ func (c *Controller) canUpgrade(obj *clusteropv1alpha1.KubeletUpgrade, now time.
 // enqueueMatchingNodes finds all the matching nodes of the KubeletUpgrade
 // object and add them to the workqueue.
 func (c *Controller) enqueueMatchingNodes(obj *clusteropv1alpha1.KubeletUpgrade) error {
-	selector, err := metav1.LabelSelectorAsSelector(obj.Spec.Selector)
+	selector, err := metav1.LabelSelectorAsSelector(&obj.Spec.Selector)
 	if err != nil {
 		return err
 	}

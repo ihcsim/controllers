@@ -17,7 +17,11 @@ var env envtest.Environment
 // The returned rest config can be used by clientsets to interact with the API
 // server.
 func Start(binDir, crdDir string, debug bool) (*rest.Config, error) {
-	env := envtest.Environment{
+	if env.Config != nil {
+		return env.Config, nil
+	}
+
+	env = envtest.Environment{
 		CRDDirectoryPaths:     strings.Split(crdDir, ","),
 		BinaryAssetsDirectory: binDir,
 		ErrorIfCRDPathMissing: true,

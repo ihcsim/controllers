@@ -26,12 +26,12 @@ type KubeletUpgrade struct {
 
 // KubeletUpgradeSpec represents the spec of the upgrade process
 type KubeletUpgradeSpec struct {
-	FailurePolicy        string                `json:"failurePolicy"`
-	MaxUnavailable       int                   `json:"maxUnavailable"`
-	Schedule             string                `json:"schedule"`
-	Selector             *metav1.LabelSelector `json:"selector"`
-	Strategy             string                `json:"strategy"`
-	TargetKubeletVersion string                `json:"targetKubeletVersion"`
+	FailurePolicy        string               `json:"failurePolicy"`
+	MaxUnavailable       int                  `json:"maxUnavailable"`
+	Schedule             string               `json:"schedule"`
+	Selector             metav1.LabelSelector `json:"selector"`
+	Strategy             string               `json:"strategy"`
+	TargetKubeletVersion string               `json:"targetKubeletVersion"`
 }
 
 const (
@@ -99,7 +99,7 @@ func (k KubeletUpgrade) UpdateNextScheduledTime(now time.Time) *KubeletUpgrade {
 		return cloned
 	}
 
-	nextScheduledTime := metav1.NewTime(cronSpec.Next(now))
+	nextScheduledTime := metav1.NewTime(cronSpec.Next(now).UTC())
 	cloned.Status.NextScheduledTime = nextScheduledTime
 
 	condition.Message = fmt.Sprintf(ConditionMessageUpdateNextScheduleTime, nextScheduledTime.UTC())

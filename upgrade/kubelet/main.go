@@ -32,9 +32,13 @@ func main() {
 	k8sInformers, clusteropInformers := informers(k8sClientsets, clusteropClientsets)
 
 	stop := handleSignal()
-	c := controller.New(k8sClientsets, k8sInformers, clusteropClientsets, clusteropInformers)
+	c := controller.New(
+		k8sClientsets,
+		k8sInformers,
+		clusteropClientsets,
+		clusteropInformers)
 
-	if err := c.Run(stop); err != nil {
+	if err := c.Reconcile(stop); err != nil {
 		klog.Errorf("controller exited with errors: %s", err)
 	}
 }

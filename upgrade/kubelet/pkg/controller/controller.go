@@ -27,6 +27,12 @@ import (
 	"k8s.io/klog/v2"
 )
 
+var (
+	tickDuration   = time.Minute * 1
+	resyncDuration = time.Minute * 10
+	requestTimeout = time.Second * 30
+)
+
 // Controller knows how to reconcile kubelet upgrades to match the in-cluster
 // states with the desired states.
 type Controller struct {
@@ -71,10 +77,6 @@ func New(
 		scheme.Scheme,
 		corev1.EventSource{Component: name})
 
-	var (
-		tickDuration   = time.Minute * 1
-		requestTimeout = time.Second * 30
-	)
 	c := &Controller{
 		k8sClientsets:       k8sClientsets,
 		k8sInformers:        k8sInformers,
@@ -88,11 +90,11 @@ func New(
 		recorder:            recorder,
 	}
 
-	k8sInformers.Core().V1().Nodes().Informer().AddEventHandler(
+	c.k8sInformers.Core().V1().Nodes().Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{},
 	)
 
-	clusteropInformers.Clusterop().V1alpha1().KubeletUpgrades().Informer().AddEventHandler(
+	c.clusteropInformers.Clusterop().V1alpha1().KubeletUpgrades().Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				now := time.Now()
@@ -104,15 +106,16 @@ func New(
 	return c
 }
 
-// Run will start the informers and sync their cache. It will block until stop
-// is closed.
-func (c *Controller) Run(stop <-chan struct{}) error {
+// Reconcile will continuously work towards reconciling the states of all the
+// KubeletUpgrade objects. It starts the informers and sync their caches. It
+// will block until stop is closed.
+func (c *Controller) Reconcile(stop <-chan struct{}) error {
 	defer func() {
-		utilruntime.HandleCrash()
 		c.ticker.Stop()
 		for _, workqueue := range c.workqueues {
 			workqueue.ShutDown()
 		}
+		utilruntime.HandleCrash()
 	}()
 
 	c.k8sInformers.Start(stop)
@@ -138,7 +141,7 @@ LOOP:
 		}
 	}
 
-	klog.Info("controller stopped")
+	klog.Info("Controller stopped")
 	return nil
 }
 

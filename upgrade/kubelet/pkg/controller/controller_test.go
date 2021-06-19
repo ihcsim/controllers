@@ -10,16 +10,20 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	k8sinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/workqueue"
 
 	"github.com/ihcsim/controllers/crd/pkg/envtest"
 	clusteropv1alpha1 "github.com/ihcsim/controllers/upgrade/kubelet/pkg/apis/clusterop.isim.dev/v1alpha1"
 	"github.com/ihcsim/controllers/upgrade/kubelet/pkg/controller/labels"
 	clusteropv1alpha1testing "github.com/ihcsim/controllers/upgrade/kubelet/pkg/controller/testing"
 	clusteropclientsetv1alpha1 "github.com/ihcsim/controllers/upgrade/kubelet/pkg/generated/clientset/versioned"
+	"github.com/ihcsim/controllers/upgrade/kubelet/pkg/generated/clientset/versioned/scheme"
 	clusteropinformers "github.com/ihcsim/controllers/upgrade/kubelet/pkg/generated/informers/externalversions"
 )
 
@@ -60,22 +64,44 @@ func TestMain(m *testing.M) {
 }
 
 func initTestController(k8sconfig *rest.Config) error {
+	utilruntime.Must(clusteropv1alpha1.AddToScheme(scheme.Scheme))
+
 	k8sClientsets, err := kubernetes.NewForConfig(k8sconfig)
 	if err != nil {
 		return err
 	}
+	k8sInformers := k8sinformers.NewSharedInformerFactory(k8sClientsets, resyncDuration)
 
 	clusteropClientsets, err := clusteropclientsetv1alpha1.NewForConfig(k8sconfig)
 	if err != nil {
 		return err
 	}
+	clusteropInformers := clusteropinformers.NewSharedInformerFactory(clusteropClientsets, resyncDuration)
 
-	k8sInformers := k8sinformers.NewSharedInformerFactory(k8sClientsets, time.Minute*10)
-	clusteropInformers := clusteropinformers.NewSharedInformerFactory(clusteropClientsets, time.Minute*10)
+	name := "test-controller"
+	testController = &Controller{
+		k8sClientsets:       k8sClientsets,
+		k8sInformers:        k8sInformers,
+		clusteropClientsets: clusteropClientsets,
+		clusteropInformers:  clusteropInformers,
+		name:                name,
+		ticker:              time.NewTicker(tickDuration),
+		tickDuration:        tickDuration,
+		requestTimeout:      requestTimeout,
+		workqueues:          map[string]workqueue.RateLimitingInterface{},
+	}
 
-	testController = New(k8sClientsets, k8sInformers, clusteropClientsets, clusteropInformers)
 	testController.recorder = record.NewFakeRecorder(10)
 	fakeRecorder = testController.recorder.(*record.FakeRecorder)
+
+	testController.k8sInformers.Core().V1().Nodes().Informer().AddEventHandler(
+		cache.ResourceEventHandlerFuncs{},
+	)
+
+	testController.clusteropInformers.Clusterop().V1alpha1().KubeletUpgrades().Informer().AddEventHandler(
+		cache.ResourceEventHandlerFuncs{},
+	)
+
 	return nil
 }
 

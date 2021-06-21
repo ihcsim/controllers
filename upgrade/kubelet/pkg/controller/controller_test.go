@@ -119,9 +119,7 @@ func TestUpdateNextScheduledTime(t *testing.T) {
 		now               time.Time
 		nextScheduledTime time.Time
 		expected          time.Time
-		updateStatus      bool // some attributes require calls to UpdateStatus() before executing the test case
 		forceUpdate       bool
-		expectedEvent     *corev1.Event
 	}
 
 	// call this function to test and assert a test case
@@ -131,11 +129,9 @@ func TestUpdateNextScheduledTime(t *testing.T) {
 			t.Fatalf("unexpected error: %s", err)
 		}
 
-		if tc.updateStatus {
-			created, err = applyTestKubeletUpgradeStatus(created, tc.nextScheduledTime, emptyConditions)
-			if err != nil {
-				t.Fatalf("unexpected error: %s", err)
-			}
+		created, err = applyTestKubeletUpgradeStatus(created, tc.nextScheduledTime, emptyConditions)
+		if err != nil {
+			t.Fatalf("unexpected error: %s", err)
 		}
 
 		updated, err := testController.updateNextScheduledTime(created, tc.now, tc.forceUpdate)
@@ -143,59 +139,23 @@ func TestUpdateNextScheduledTime(t *testing.T) {
 			t.Fatalf("unexpected error: %s", err)
 		}
 
-		actual := updated.Status.NextScheduledTime.Time
+		actual := updated.Status.NextScheduledTime.Time.UTC()
 		if !tc.expected.Equal(actual) {
 			t.Errorf("mismatch next scheduled time. Expected: %s.   Actual: %s", tc.expected, actual)
-		}
-
-		if e := tc.expectedEvent; e != nil {
-			// see https://github.com/kubernetes/client-go/blob/58854425ecd20b43fd398e2b5d75d4fb5f323af3/tools/record/fake.go#L46
-			expected := fmt.Sprintf("%s %s %s", e.Type, e.Reason, e.Message)
-			actual := <-fakeRecorder.Events
-			if expected != actual {
-				t.Errorf("mismatch events.\n  Expected: %s\n  Actual: %s", expected, actual)
-			}
 		}
 	}
 
 	t.Run("scheduled time expired", func(t *testing.T) {
 		var testCases = []testCase{
 			{
-				now:      time.Date(2021, 6, 17, 13, 46, 0, 0, time.UTC),
-				expected: time.Date(2021, 6, 17, 13, 51, 0, 0, time.UTC),
-				expectedEvent: &corev1.Event{
-					Type:   corev1.EventTypeNormal,
-					Reason: clusteropv1alpha1.ConditionReasonNextScheduledTimeStale,
-					Message: fmt.Sprintf(
-						clusteropv1alpha1.ConditionMessageUpdateNextScheduleTime,
-						time.Date(2021, 6, 17, 13, 51, 0, 0, time.UTC)),
-				},
-			},
-			{
 				now:               time.Date(2021, 6, 17, 13, 46, 0, 0, time.UTC),
 				nextScheduledTime: time.Date(2021, 6, 17, 13, 36, 0, 0, time.UTC),
 				expected:          time.Date(2021, 6, 17, 13, 51, 0, 0, time.UTC),
-				updateStatus:      true,
-				expectedEvent: &corev1.Event{
-					Type:   corev1.EventTypeNormal,
-					Reason: clusteropv1alpha1.ConditionReasonNextScheduledTimeStale,
-					Message: fmt.Sprintf(
-						clusteropv1alpha1.ConditionMessageUpdateNextScheduleTime,
-						time.Date(2021, 6, 17, 13, 51, 0, 0, time.UTC)),
-				},
 			},
 			{
 				now:               time.Date(2021, 6, 17, 23, 55, 0, 0, time.UTC),
 				nextScheduledTime: time.Date(2021, 6, 17, 23, 45, 0, 0, time.UTC),
 				expected:          time.Date(2021, 6, 18, 0, 0, 0, 0, time.UTC),
-				updateStatus:      true,
-				expectedEvent: &corev1.Event{
-					Type:   corev1.EventTypeNormal,
-					Reason: clusteropv1alpha1.ConditionReasonNextScheduledTimeStale,
-					Message: fmt.Sprintf(
-						clusteropv1alpha1.ConditionMessageUpdateNextScheduleTime,
-						time.Date(2021, 6, 18, 0, 0, 0, 0, time.UTC)),
-				},
 			},
 		}
 
@@ -213,13 +173,11 @@ func TestUpdateNextScheduledTime(t *testing.T) {
 				now:               time.Date(2021, 6, 17, 13, 46, 0, 0, time.UTC),
 				nextScheduledTime: time.Date(2021, 6, 17, 13, 44, 0, 0, time.UTC),
 				expected:          time.Date(2021, 6, 17, 13, 44, 0, 0, time.UTC),
-				updateStatus:      true,
 			},
 			{
 				now:               time.Date(2021, 6, 17, 23, 55, 0, 0, time.UTC),
 				nextScheduledTime: time.Date(2021, 6, 17, 23, 51, 0, 0, time.UTC),
 				expected:          time.Date(2021, 6, 17, 23, 51, 0, 0, time.UTC),
-				updateStatus:      true,
 			},
 		}
 
@@ -237,19 +195,16 @@ func TestUpdateNextScheduledTime(t *testing.T) {
 				now:               time.Date(2021, 6, 17, 13, 46, 0, 0, time.UTC),
 				nextScheduledTime: time.Date(2021, 6, 17, 13, 47, 0, 0, time.UTC),
 				expected:          time.Date(2021, 6, 17, 13, 47, 0, 0, time.UTC),
-				updateStatus:      true,
 			},
 			{
 				now:               time.Date(2021, 6, 17, 13, 46, 0, 0, time.UTC),
 				nextScheduledTime: time.Date(2021, 6, 17, 13, 56, 0, 0, time.UTC),
 				expected:          time.Date(2021, 6, 17, 13, 56, 0, 0, time.UTC),
-				updateStatus:      true,
 			},
 			{
 				now:               time.Date(2021, 6, 17, 23, 46, 0, 0, time.UTC),
 				nextScheduledTime: time.Date(2021, 6, 18, 00, 06, 0, 0, time.UTC),
 				expected:          time.Date(2021, 6, 18, 00, 06, 0, 0, time.UTC),
-				updateStatus:      true,
 			},
 		}
 

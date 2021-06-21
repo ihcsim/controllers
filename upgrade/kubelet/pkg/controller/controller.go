@@ -242,12 +242,6 @@ func (c *Controller) updateNextScheduledTime(obj *clusteropv1alpha1.KubeletUpgra
 	// account for the 5-minutes look-back window
 	if next.IsZero() || forceUpdate || (next.Before(now) && now.Sub(next) >= time.Minute*5) {
 		cloned := obj.UpdateNextScheduledTime(now)
-
-		// broadcast event
-		eventType := corev1.EventTypeNormal
-		mostRecentCondition := cloned.Status.Conditions[len(cloned.Status.Conditions)-1]
-		c.recorder.Event(cloned, eventType, mostRecentCondition.Reason, mostRecentCondition.Message)
-
 		return c.clusteropClientsets.ClusteropV1alpha1().KubeletUpgrades().UpdateStatus(context.Background(), cloned, metav1.UpdateOptions{})
 	}
 

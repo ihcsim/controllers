@@ -35,19 +35,15 @@ type KubeletUpgradeSpec struct {
 }
 
 const (
-	ConditionMessageUpdateNextScheduleTime = "updated next schedule time to %s"
-	ConditionMessageUpgradeStarted         = "started kubelet upgrade"
-	ConditionMessageUpgradeCompleted       = "completed kubelet upgrade"
-
-	ConditionReasonNextScheduledTimeStale = "next scheduled time was stale"
+	ConditionMessageUpgradeStarted   = "started kubelet upgrade"
+	ConditionMessageUpgradeCompleted = "completed kubelet upgrade"
 
 	ConditionStatusStarted   = "started"
 	ConditionStatusCompleted = "completed"
 	ConditionStatusFailed    = "failed"
 
-	ConditionTypeUpdatedNextScheduledTime = "UpdatedNextScheduledTime"
-	ConditionTypeUpgradeStarted           = "UpgradeStarted"
-	ConditionTypeUpgradeCompleted         = "UpgradeCompleted"
+	ConditionTypeUpgradeStarted   = "UpgradeStarted"
+	ConditionTypeUpgradeCompleted = "UpgradeCompleted"
 
 	UpgradeFailurePolicyStrict = "strict"
 	UpgradeFailurePolicyIgnore = "ignore"
@@ -86,26 +82,14 @@ type KubeletUpgradeList struct {
 // updates its next scheduled time.
 func (k KubeletUpgrade) UpdateNextScheduledTime(now time.Time) *KubeletUpgrade {
 	cloned := k.DeepCopy()
-	condition := UpgradeCondition{
-		LastTransitionTime: metav1.NewTime(now),
-		Type:               ConditionTypeUpdatedNextScheduledTime,
-	}
-
 	schedule := cloned.Spec.Schedule
 	cronSpec, err := cron.Parse(schedule)
 	if err != nil {
-		condition.Status = ConditionStatusFailed
-		condition.Reason = err.Error()
 		return cloned
 	}
 
 	nextScheduledTime := metav1.NewTime(cronSpec.Next(now).UTC())
 	cloned.Status.NextScheduledTime = nextScheduledTime
-
-	condition.Message = fmt.Sprintf(ConditionMessageUpdateNextScheduleTime, nextScheduledTime.UTC())
-	condition.Reason = ConditionReasonNextScheduledTimeStale
-	condition.Status = ConditionStatusCompleted
-	cloned.Status.Conditions = append(cloned.Status.Conditions, condition)
 
 	return cloned
 }

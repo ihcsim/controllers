@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -35,6 +36,8 @@ var (
 
 	testController *Controller
 	fakeRecorder   *record.FakeRecorder
+
+	emptyConditions = []clusteropv1alpha1.UpgradeCondition{}
 )
 
 func TestMain(m *testing.M) {
@@ -123,9 +126,16 @@ func TestUpdateNextScheduledTime(t *testing.T) {
 
 	// call this function to test and assert a test case
 	assertTestCase := func(tc testCase, objName string) {
-		created, err := applyTestKubeletUpgrade(objName, "@every 5m", tc.updateStatus, tc.nextScheduledTime, nil)
+		created, err := applyTestKubeletUpgrade(objName, "@every 5m", nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %s", err)
+		}
+
+		if tc.updateStatus {
+			created, err = applyTestKubeletUpgradeStatus(created, tc.nextScheduledTime, emptyConditions)
+			if err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
 		}
 
 		updated, err := testController.updateNextScheduledTime(created, tc.now, tc.forceUpdate)
@@ -263,7 +273,7 @@ func TestCanUpgrade(t *testing.T) {
 
 		// call this function to test and assert a test case
 		assertTestCase := func(tc testCase, objName string) {
-			created, err := applyTestKubeletUpgrade(objName, "@every 5m", false, time.Time{}, tc.labels)
+			created, err := applyTestKubeletUpgrade(objName, "@every 5m", tc.labels)
 			if err != nil {
 				t.Fatalf("unexpected error: %s", err)
 			}
@@ -309,9 +319,16 @@ func TestCanUpgrade(t *testing.T) {
 
 		// call this function to test and assert a test case
 		assertTestCase := func(tc testCase, objName string) {
-			created, err := applyTestKubeletUpgrade(objName, "@every 5m", tc.updateStatus, tc.nextScheduledTime, nil)
+			created, err := applyTestKubeletUpgrade(objName, "@every 5m", nil)
 			if err != nil {
 				t.Fatalf("unexpected error: %s", err)
+			}
+
+			if tc.updateStatus {
+				created, err = applyTestKubeletUpgradeStatus(created, tc.nextScheduledTime, emptyConditions)
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
 			}
 
 			actual, actualReason := testController.canUpgrade(created, tc.now)
@@ -542,28 +559,114 @@ func TestEnqueueMatchingNodes(t *testing.T) {
 	}
 }
 
-func applyTestKubeletUpgrade(name, schedule string, updateStatus bool, nextScheduledTime time.Time, labels map[string]string) (*clusteropv1alpha1.KubeletUpgrade, error) {
+func TestRecordUpgradeStatus(t *testing.T) {
+	var (
+		now               = time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
+		nextScheduledTime = time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
+	)
+
+	var testCases = []struct {
+		description       string
+		expectedCondition clusteropv1alpha1.UpgradeCondition
+		expectedEvent     *corev1.Event
+		resultErr         error
+		status            string
+	}{
+		{
+			description: "started",
+			status:      "started",
+			expectedCondition: clusteropv1alpha1.UpgradeCondition{
+				Type:    clusteropv1alpha1.ConditionTypeUpgradeStarted,
+				Message: clusteropv1alpha1.ConditionMessageUpgradeStarted,
+				Status:  clusteropv1alpha1.ConditionStatusStarted,
+			},
+			expectedEvent: &corev1.Event{
+				Message: clusteropv1alpha1.ConditionMessageUpgradeStarted,
+				Reason:  clusteropv1alpha1.ConditionStatusStarted,
+				Type:    corev1.EventTypeNormal,
+			},
+		},
+		{
+			description: "completed",
+			status:      "completed",
+			expectedCondition: clusteropv1alpha1.UpgradeCondition{
+				Type:    clusteropv1alpha1.ConditionTypeUpgradeCompleted,
+				Message: clusteropv1alpha1.ConditionMessageUpgradeCompleted,
+				Status:  clusteropv1alpha1.ConditionStatusCompleted,
+			},
+			expectedEvent: &corev1.Event{
+				Message: clusteropv1alpha1.ConditionMessageUpgradeCompleted,
+				Reason:  clusteropv1alpha1.ConditionStatusCompleted,
+				Type:    corev1.EventTypeNormal,
+			},
+		},
+		{
+			description: "completed with errors",
+			status:      "completed",
+			resultErr:   errors.New("failed test upgrade"),
+			expectedCondition: clusteropv1alpha1.UpgradeCondition{
+				Type:    clusteropv1alpha1.ConditionTypeUpgradeCompleted,
+				Message: "failed test upgrade",
+				Status:  clusteropv1alpha1.ConditionStatusFailed,
+			},
+			expectedEvent: &corev1.Event{
+				Reason:  clusteropv1alpha1.ConditionStatusFailed,
+				Message: "failed test upgrade",
+				Type:    corev1.EventTypeWarning,
+			},
+		},
+	}
+
+	for i, tc := range testCases {
+		objName := fmt.Sprintf("kubelet-upgrade-record-status-%d", i)
+		created, err := applyTestKubeletUpgrade(objName, "@every 5m", nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %s", err)
+		}
+
+		created, err = applyTestKubeletUpgradeStatus(created, nextScheduledTime, emptyConditions)
+		if err != nil {
+			t.Fatalf("unexpected error: %s", err)
+		}
+
+		updated, err := testController.recordUpgradeStatus(created, tc.status, tc.resultErr, now)
+		if err != nil {
+			t.Fatal("unexpected error: ", err)
+		}
+
+		if actual := len(updated.Status.Conditions); actual != 1 {
+			t.Fatalf("expected upgrade object %q to have 1 status condition, but got %d", objName, actual)
+		}
+
+		if e := tc.expectedEvent; e != nil {
+			// see https://github.com/kubernetes/client-go/blob/58854425ecd20b43fd398e2b5d75d4fb5f323af3/tools/record/fake.go#L46
+			expected := fmt.Sprintf("%s %s %s", e.Type, e.Reason, e.Message)
+			actual := <-fakeRecorder.Events
+			if expected != actual {
+				t.Errorf("mismatch events.\n  Expected: %s\n  Actual: %s", expected, actual)
+			}
+		}
+	}
+}
+
+func applyTestKubeletUpgrade(name, schedule string, labels map[string]string) (*clusteropv1alpha1.KubeletUpgrade, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), testController.requestTimeout)
 	defer cancel()
 
-	// create the object
 	obj := clusteropv1alpha1testing.NewTestKubeletUpgrade(name)
 	clusteropv1alpha1testing.WithSchedule(obj, schedule)
 	clusteropv1alpha1testing.WithLabels(obj, labels)
-	created, err := testController.clusteropClientsets.ClusteropV1alpha1().KubeletUpgrades().Create(ctx, obj, metav1.CreateOptions{})
-	if err != nil {
-		return nil, err
-	}
+	return testController.clusteropClientsets.ClusteropV1alpha1().KubeletUpgrades().Create(ctx, obj, metav1.CreateOptions{})
+}
 
-	if !updateStatus {
-		return created, nil
-	}
+func applyTestKubeletUpgradeStatus(obj *clusteropv1alpha1.KubeletUpgrade, nextScheduledTime time.Time, conditions []clusteropv1alpha1.UpgradeCondition) (*clusteropv1alpha1.KubeletUpgrade, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), testController.requestTimeout)
+	defer cancel()
 
-	// update its status if necessary
-	conditions := []clusteropv1alpha1.UpgradeCondition{}
-	clusteropv1alpha1testing.WithStatusConditions(created, conditions)
-	clusteropv1alpha1testing.WithNextScheduledTime(created, nextScheduledTime)
-	return testController.clusteropClientsets.ClusteropV1alpha1().KubeletUpgrades().UpdateStatus(ctx, created, metav1.UpdateOptions{})
+	clusteropv1alpha1testing.WithStatusConditions(obj, conditions)
+	clusteropv1alpha1testing.WithNextScheduledTime(obj, nextScheduledTime)
+
+	return testController.clusteropClientsets.ClusteropV1alpha1().KubeletUpgrades().UpdateStatus(ctx, obj, metav1.UpdateOptions{})
 }
 
 func applyTestNodes() error {

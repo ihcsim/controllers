@@ -144,7 +144,7 @@ func (k KubeletUpgrade) RecordUpgradeStarted(now time.Time) (*KubeletUpgrade, er
 
 // RecordUpgradeStarted makes a clone of the KubeletUpgrade and updates its
 // status with an "upgrade completed" condition.
-func (k KubeletUpgrade) RecordUpgradeCompleted(err error, now time.Time) (*KubeletUpgrade, error) {
+func (k KubeletUpgrade) RecordUpgradeCompleted(resultErr error, now time.Time) (*KubeletUpgrade, error) {
 	cloned := k.DeepCopy()
 	condition := UpgradeCondition{
 		LastTransitionTime: metav1.NewTime(now),
@@ -167,8 +167,8 @@ func (k KubeletUpgrade) RecordUpgradeCompleted(err error, now time.Time) (*Kubel
 	condition.Message = ConditionMessageUpgradeCompleted
 	condition.Status = ConditionStatusCompleted
 
-	if err != nil {
-		condition.Reason = fmt.Sprintf("%s", err)
+	if resultErr != nil {
+		condition.Message = fmt.Sprintf("%s", resultErr)
 		condition.Status = ConditionStatusFailed
 	}
 

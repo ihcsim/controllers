@@ -349,7 +349,7 @@ func (c *Controller) recordUpgradeStatus(
 
 	switch status {
 	case "completed":
-		updatedClone, err = obj.RecordUpgradeCompleted(err, now)
+		updatedClone, err = obj.RecordUpgradeCompleted(resultErr, now)
 	case "started":
 		updatedClone, err = obj.RecordUpgradeStarted(now)
 	default:
@@ -365,25 +365,11 @@ func (c *Controller) recordUpgradeStatus(
 		eventType = corev1.EventTypeWarning
 	}
 	mostRecentCondition := updatedClone.Status.Conditions[len(updatedClone.Status.Conditions)-1]
-	c.recorder.Event(updatedClone, eventType, mostRecentCondition.Reason, mostRecentCondition.Message)
+
+	c.recorder.Event(updatedClone, eventType, mostRecentCondition.Status, mostRecentCondition.Message)
 
 	rootCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	updateSpec := func() error {
-		ctx, cancel := context.WithTimeout(rootCtx, c.requestTimeout)
-		defer cancel()
-
-		updatedClone, err = c.clusteropClientsets.ClusteropV1alpha1().KubeletUpgrades().Update(ctx, updatedClone, metav1.UpdateOptions{})
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-
-	if err := updateSpec(); err != nil {
-		return nil, err
-	}
 
 	updateStatus := func() error {
 		ctx, cancel := context.WithTimeout(rootCtx, c.requestTimeout)
@@ -397,6 +383,22 @@ func (c *Controller) recordUpgradeStatus(
 	}
 
 	if err := updateStatus(); err != nil {
+		return nil, err
+	}
+
+	updateSpec := func() error {
+		ctx, cancel := context.WithTimeout(rootCtx, c.requestTimeout)
+		defer cancel()
+
+		updatedClone, err = c.clusteropClientsets.ClusteropV1alpha1().KubeletUpgrades().Update(ctx, updatedClone, metav1.UpdateOptions{})
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	if err := updateSpec(); err != nil {
 		return nil, err
 	}
 

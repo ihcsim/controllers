@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -25,9 +26,11 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
+	"k8s.io/kubectl/pkg/drain"
 )
 
 var (
+	drainTimeout   = time.Minute * 1
 	tickDuration   = time.Minute * 1
 	resyncDuration = time.Minute * 10
 	requestTimeout = time.Second * 30
@@ -40,6 +43,8 @@ type Controller struct {
 	k8sInformers        k8sinformers.SharedInformerFactory
 	clusteropClientsets clusteropclientsetsv1alpha1.Interface
 	clusteropInformers  clusteropinformers.SharedInformerFactory
+
+	drainer *drain.Helper
 
 	workerCount int
 	name        string
@@ -77,11 +82,20 @@ func New(
 		scheme.Scheme,
 		corev1.EventSource{Component: name})
 
+	drainer := &drain.Helper{
+		Client:             k8sClientsets,
+		GracePeriodSeconds: -1, // use pod's terminationGracePeriodSeconds
+		Timeout:            drainTimeout,
+		Out:                os.Stderr,
+		ErrOut:             os.Stderr,
+	}
+
 	c := &Controller{
 		k8sClientsets:       k8sClientsets,
 		k8sInformers:        k8sInformers,
 		clusteropClientsets: clusteropClientsets,
 		clusteropInformers:  clusteropInformers,
+		drainer:             drainer,
 		name:                name,
 		ticker:              time.NewTicker(tickDuration),
 		tickDuration:        tickDuration,
@@ -524,13 +538,17 @@ func (c *Controller) upgradeKubelet(key string, upgrade *clusteropv1alpha1.Kubel
 		return result
 	}
 
-	updatedClone, err := c.cordonNode(true, *node, upgrade)
-	if err != nil {
+	if err := c.cordonNode(node); err != nil {
 		result.Err = err
 		return result
 	}
 
-	if _, err := c.cordonNode(false, *updatedClone, upgrade); err != nil {
+	if err := drain.RunNodeDrain(c.drainer, node.GetName()); err != nil {
+		result.Err = err
+		return result
+	}
+
+	if err := c.uncordonNode(node); err != nil {
 		result.Err = err
 		return result
 	}
@@ -538,20 +556,18 @@ func (c *Controller) upgradeKubelet(key string, upgrade *clusteropv1alpha1.Kubel
 	return result
 }
 
-// cordonNode creates a clone of node and marks it as unschedulable, if the cordon
-// flag is set to true. Othewise, it marks the node as schedulable.
-func (c *Controller) cordonNode(cordon bool, node corev1.Node, upgrade *clusteropv1alpha1.KubeletUpgrade) (*corev1.Node, error) {
-	action := "uncordoning"
-	if cordon {
-		action = "cordoning"
-	}
-
+func (c *Controller) cordonNode(node *corev1.Node) error {
 	ctx, cancel := context.WithTimeout(context.Background(), c.requestTimeout)
 	defer cancel()
 
-	klog.Infof("%s node (upgrade=%s,node=%s)", action, upgrade.GetName(), node.GetName())
+	c.drainer.Ctx = ctx
+	return drain.RunCordonOrUncordon(c.drainer, node, true)
+}
 
-	cloned := node.DeepCopy()
-	cloned.Spec.Unschedulable = cordon
-	return c.k8sClientsets.CoreV1().Nodes().Update(ctx, cloned, metav1.UpdateOptions{})
+func (c *Controller) uncordonNode(node *corev1.Node) error {
+	ctx, cancel := context.WithTimeout(context.Background(), c.requestTimeout)
+	defer cancel()
+
+	c.drainer.Ctx = ctx
+	return drain.RunCordonOrUncordon(c.drainer, node, false)
 }

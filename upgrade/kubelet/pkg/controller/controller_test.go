@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
+	"k8s.io/kubectl/pkg/drain"
 
 	"github.com/ihcsim/controllers/crd/pkg/envtest"
 	clusteropv1alpha1 "github.com/ihcsim/controllers/upgrade/kubelet/pkg/apis/clusterop.isim.dev/v1alpha1"
@@ -92,6 +94,13 @@ func initTestController(k8sconfig *rest.Config) error {
 		tickDuration:        tickDuration,
 		requestTimeout:      requestTimeout,
 		workqueues:          map[string]workqueue.RateLimitingInterface{},
+	}
+
+	testController.drainer = &drain.Helper{
+		Client:  k8sClientsets,
+		Timeout: drainTimeout,
+		Out:     io.Discard,
+		ErrOut:  io.Discard,
 	}
 
 	testController.recorder = record.NewFakeRecorder(10)
@@ -601,6 +610,51 @@ func TestRecordUpgradeStatus(t *testing.T) {
 				t.Errorf("mismatch events.\n  Expected: %s\n  Actual: %s", expected, actual)
 			}
 		}
+	}
+}
+
+func TestCordonNode(t *testing.T) {
+	nodeName := "node-cordoned"
+	node, err := applyTestNode(nodeName, nil)
+	if err != nil {
+		t.Fatal("unexpected error: ", err)
+	}
+
+	if err := testController.cordonNode(node); err != nil {
+		t.Fatal("unexpected error: ", err)
+	}
+
+	ctx := context.Background()
+	updated, err := testController.k8sClientsets.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal("unexpected error: ", err)
+	}
+
+	if !updated.Spec.Unschedulable {
+		t.Errorf("expected node %s to be cordoned", nodeName)
+	}
+}
+
+func TestUncordonNode(t *testing.T) {
+	nodeName := "node-uncordoned"
+	node, err := applyTestNode(nodeName, nil)
+	if err != nil {
+		t.Fatal("unexpected error: ", err)
+	}
+	node.Spec.Unschedulable = true
+
+	if err := testController.uncordonNode(node); err != nil {
+		t.Fatal("unexpected error: ", err)
+	}
+
+	ctx := context.Background()
+	updated, err := testController.k8sClientsets.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal("unexpected error: ", err)
+	}
+
+	if updated.Spec.Unschedulable {
+		t.Errorf("expected node %s to be uncordoned", nodeName)
 	}
 }
 

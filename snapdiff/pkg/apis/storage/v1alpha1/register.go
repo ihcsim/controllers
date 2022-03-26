@@ -19,6 +19,8 @@ var (
 	// API to a scheme.
 	schemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
 
+	localSchemeBuilder = &schemeBuilder
+
 	// AddToScheme can be used to register the known types of this API with a
 	// scheme
 	AddToScheme = schemeBuilder.AddToScheme

@@ -34,9 +34,9 @@ type FakeChangedBlocks struct {
 	ns   string
 }
 
-var changedblocksResource = schema.GroupVersionResource{Group: "storage", Version: "", Resource: "changedblocks"}
+var changedblocksResource = schema.GroupVersionResource{Group: "storage.isim.dev", Version: "", Resource: "changedblocks"}
 
-var changedblocksKind = schema.GroupVersionKind{Group: "storage", Version: "", Kind: "ChangedBlock"}
+var changedblocksKind = schema.GroupVersionKind{Group: "storage.isim.dev", Version: "", Kind: "ChangedBlock"}
 
 // Get takes name of the changedBlock, and returns the corresponding changedBlock object, and an error if there is any.
 func (c *FakeChangedBlocks) Get(ctx context.Context, name string, options v1.GetOptions) (result *storage.ChangedBlock, err error) {

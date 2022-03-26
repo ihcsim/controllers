@@ -50,7 +50,7 @@ func (f *genericInformer) Lister() cache.GenericLister {
 // TODO extend this to unknown resources with a client pool
 func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource) (GenericInformer, error) {
 	switch resource {
-	// Group=storage, Version=internalVersion
+	// Group=storage.isim.dev, Version=internalVersion
 	case storage.SchemeGroupVersion.WithResource("changedblocks"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Storage().InternalVersion().ChangedBlocks().Informer()}, nil
 

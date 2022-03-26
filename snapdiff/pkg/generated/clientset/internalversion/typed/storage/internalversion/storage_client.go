@@ -28,7 +28,7 @@ type StorageInterface interface {
 	ChangedBlocksGetter
 }
 
-// StorageClient is used to interact with features provided by the storage group.
+// StorageClient is used to interact with features provided by the storage.isim.dev group.
 type StorageClient struct {
 	restClient rest.Interface
 }
@@ -86,8 +86,8 @@ func setConfigDefaults(config *rest.Config) error {
 	if config.UserAgent == "" {
 		config.UserAgent = rest.DefaultKubernetesUserAgent()
 	}
-	if config.GroupVersion == nil || config.GroupVersion.Group != scheme.Scheme.PrioritizedVersionsForGroup("storage")[0].Group {
-		gv := scheme.Scheme.PrioritizedVersionsForGroup("storage")[0]
+	if config.GroupVersion == nil || config.GroupVersion.Group != scheme.Scheme.PrioritizedVersionsForGroup("storage.isim.dev")[0].Group {
+		gv := scheme.Scheme.PrioritizedVersionsForGroup("storage.isim.dev")[0]
 		config.GroupVersion = &gv
 	}
 	config.NegotiatedSerializer = scheme.Codecs

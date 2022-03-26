@@ -13,7 +13,7 @@ type ChangedBlock struct {
 	Spec ChangedBlockSpec
 }
 
-// ChangedBlockSpec is a changed block.
+// ChangedBlockSpec is a changed block spec.
 type ChangedBlockSpec struct {
 	SnapshotBase   string
 	SnapshotTarget string

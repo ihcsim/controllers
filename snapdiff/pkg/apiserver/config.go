@@ -1,7 +1,11 @@
 package apiserver
 
 import (
+	"github.com/ihcsim/controllers/snapdiff/pkg/apis/storage"
+	"github.com/ihcsim/controllers/snapdiff/pkg/apiserver/registry"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/version"
+	"k8s.io/apiserver/pkg/registry/rest"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 )
 
@@ -36,10 +40,20 @@ func (c CompletedConfig) New() (*Server, error) {
 		GenericAPIServer: gs,
 	}
 
-	// apiGroupInfo := genericapiserver.NewDefaultAPIGroupIVnfo(
-	// storage.GroupName, Scheme, metav1.ParameterCodec, Codecs)
-	// v1alpha1Storage := map[string]rest.Storage{}
-	// v1alpha1Storage[] = customregistry.RESTInPeace()
+	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(
+		storage.GroupName,
+		Scheme,
+		metav1.ParameterCodec,
+		Codecs)
+	v1alpha1Storage := map[string]rest.Storage{}
+	v1alpha1Storage["changedBlocks"] = registry.PanicOnErr(
+		registry.NewREST(Scheme, c.GenericConfig.RESTOptionsGetter),
+	)
+	apiGroupInfo.VersionedResourcesStorageMap["v1alpha1"] = v1alpha1Storage
+
+	if err := s.GenericAPIServer.InstallAPIGroup(&apiGroupInfo); err != nil {
+		return nil, err
+	}
 
 	return s, nil
 }

@@ -9,8 +9,6 @@ import (
 	informers "github.com/ihcsim/controllers/snapdiff/pkg/generated/informers/externalversions"
 	"github.com/ihcsim/controllers/snapdiff/pkg/initializer"
 	"github.com/pkg/errors"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apiserver/pkg/admission"
 	genericapiserver "k8s.io/apiserver/pkg/server"
@@ -18,11 +16,6 @@ import (
 )
 
 const etcdPathPrefix = "/registry/storage.isim.dev"
-
-var (
-	Scheme = runtime.NewScheme()
-	Codecs = serializer.NewCodecFactory(Scheme)
-)
 
 type Options struct {
 	RecommendedOptions    *genericoptions.RecommendedOptions
@@ -49,7 +42,7 @@ func (o *Options) Run(stopCh <-chan struct{}) error {
 		return err
 	}
 
-	server.GenericAPIServer.AddPostStartHook("storage-apiserver-informers",
+	server.GenericAPIServer.AddPostStartHook("snapdiff-apiserver-informers",
 		func(context genericapiserver.PostStartHookContext) error {
 			recommendedConfig.GenericConfig.SharedInformerFactory.Start(context.StopCh)
 			o.SharedInformerFactory.Start(context.StopCh)
@@ -61,7 +54,11 @@ func (o *Options) Run(stopCh <-chan struct{}) error {
 }
 
 func (o *Options) RecommendedConfig() (*RecommendedConfig, error) {
-	if err := o.RecommendedOptions.SecureServing.MaybeDefaultWithSelfSignedCerts("localhost", nil, []net.IP{net.ParseIP("127.0.0.1")}); err != nil {
+	if err := o.RecommendedOptions.SecureServing.MaybeDefaultWithSelfSignedCerts(
+		"localhost",
+		nil,
+		[]net.IP{net.ParseIP("127.0.0.1")},
+	); err != nil {
 		return nil, errors.Wrap(err, "failed to create self-signed certificates")
 	}
 

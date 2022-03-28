@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: snapdiff
+  namespace: snapdiff
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: snapdiff
+  namespace: snapdiff
+spec:
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 8443
+  selector:
+    app: snapdiff
+    role: apiserver
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: snapdiff
+  namespace: snapdiff
+  labels:
+    app: snapdiff
+    role: apiserver
+spec:
+  selector:
+    matchLabels:
+      app: snapdiff
+      role: apiserver
+  template:
+    metadata:
+      labels:
+        app: snapdiff
+        role: apiserver
+    spec:
+      serviceAccountName: snapdiff
+      containers:
+      - name: apiserver
+        image: quay.io/isim/snapdiff
+        imagePullPolicy: Always
+        command: ["/bin/snapdiff"]
+        args:
+        - --etcd-servers=http://localhost:2379
+        - --cert-dir=/etc/tls
+        - --secure-port=8443
+        - --v=4
+      - name: etcd
+        image: quay.io/coreos/etcd:v3.5.2
+        workingDir: /run/etcd
+

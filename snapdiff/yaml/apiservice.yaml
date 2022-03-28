@@ -1,0 +1,13 @@
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1alpha1.storage.isim.dev
+spec:
+  insecureSkipTLSVerify: true
+  group: storage.isim.dev
+  groupPriorityMinimum: 2000
+  versionPriority: 20
+  service:
+    namespace: snapdiff
+    name: snapdiff
+  version: v1alpha1

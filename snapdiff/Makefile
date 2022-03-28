@@ -3,3 +3,6 @@ build:
 
 push:
 	docker push quay.io/isim/snapdiff
+
+codegen:
+	./hack/update-codegen.sh

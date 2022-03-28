@@ -15,11 +15,10 @@ type ChangedBlock struct {
 
 // ChangedBlockSpec is a changed block.
 type ChangedBlockSpec struct {
-	SnapshotBase   string            `json:"snapshotBase"`
-	SnapshotTarget string            `json:"snapshotTarget"`
-	VolumeID       string            `json:"volumeId"`
-	Secrets        map[string]string `json:"secrets"`
-	Parameters     map[string]string `json:"parameters"`
+	Offset  int64
+	Size    int64
+	Context []byte
+	ZeroOut bool
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

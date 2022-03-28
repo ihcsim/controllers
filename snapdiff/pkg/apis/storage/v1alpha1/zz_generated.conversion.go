@@ -44,16 +44,6 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}); err != nil {
 		return err
 	}
-	if err := s.AddGeneratedConversionFunc((*ChangedBlockList)(nil), (*storage.ChangedBlockList)(nil), func(a, b interface{}, scope conversion.Scope) error {
-		return Convert_v1alpha1_ChangedBlockList_To_storage_ChangedBlockList(a.(*ChangedBlockList), b.(*storage.ChangedBlockList), scope)
-	}); err != nil {
-		return err
-	}
-	if err := s.AddGeneratedConversionFunc((*storage.ChangedBlockList)(nil), (*ChangedBlockList)(nil), func(a, b interface{}, scope conversion.Scope) error {
-		return Convert_storage_ChangedBlockList_To_v1alpha1_ChangedBlockList(a.(*storage.ChangedBlockList), b.(*ChangedBlockList), scope)
-	}); err != nil {
-		return err
-	}
 	if err := s.AddGeneratedConversionFunc((*ChangedBlockSpec)(nil), (*storage.ChangedBlockSpec)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return Convert_v1alpha1_ChangedBlockSpec_To_storage_ChangedBlockSpec(a.(*ChangedBlockSpec), b.(*storage.ChangedBlockSpec), scope)
 	}); err != nil {
@@ -61,6 +51,16 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}
 	if err := s.AddGeneratedConversionFunc((*storage.ChangedBlockSpec)(nil), (*ChangedBlockSpec)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return Convert_storage_ChangedBlockSpec_To_v1alpha1_ChangedBlockSpec(a.(*storage.ChangedBlockSpec), b.(*ChangedBlockSpec), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddConversionFunc((*storage.ChangedBlockList)(nil), (*ChangedBlockList)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_storage_ChangedBlockList_To_v1alpha1_ChangedBlockList(a.(*storage.ChangedBlockList), b.(*ChangedBlockList), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddConversionFunc((*ChangedBlockList)(nil), (*storage.ChangedBlockList)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1alpha1_ChangedBlockList_To_storage_ChangedBlockList(a.(*ChangedBlockList), b.(*storage.ChangedBlockList), scope)
 	}); err != nil {
 		return err
 	}
@@ -94,13 +94,13 @@ func Convert_storage_ChangedBlock_To_v1alpha1_ChangedBlock(in *storage.ChangedBl
 }
 
 func autoConvert_v1alpha1_ChangedBlockList_To_storage_ChangedBlockList(in *ChangedBlockList, out *storage.ChangedBlockList, s conversion.Scope) error {
-	// WARNING: in.ObjectMeta requires manual conversion: does not exist in peer-type
+	out.ListMeta = in.ListMeta
 	out.Items = *(*[]storage.ChangedBlock)(unsafe.Pointer(&in.Items))
 	return nil
 }
 
 func autoConvert_storage_ChangedBlockList_To_v1alpha1_ChangedBlockList(in *storage.ChangedBlockList, out *ChangedBlockList, s conversion.Scope) error {
-	// WARNING: in.ListMeta requires manual conversion: does not exist in peer-type
+	out.ListMeta = in.ListMeta
 	out.Items = *(*[]ChangedBlock)(unsafe.Pointer(&in.Items))
 	return nil
 }

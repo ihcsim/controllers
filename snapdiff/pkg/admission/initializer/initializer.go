@@ -5,8 +5,8 @@ import (
 	"k8s.io/apiserver/pkg/admission"
 )
 
-// WantsStorageInformerFactory defines a function which sets InformerFactory for
-// admission plugins that need it.
+// WantsStorageInformerFactory defines a function which sets the storage
+// InformerFactory for admission plugins that need it.
 type WantsStorageInformerFactory interface {
 	SetStorageInformerFactory(informers.SharedInformerFactory)
 	admission.InitializationValidator

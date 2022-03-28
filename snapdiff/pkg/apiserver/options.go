@@ -4,10 +4,11 @@ import (
 	"io"
 	"net"
 
+	"github.com/ihcsim/controllers/snapdiff/pkg/admission/initializer"
+	"github.com/ihcsim/controllers/snapdiff/pkg/admission/plugin/changedblock"
 	"github.com/ihcsim/controllers/snapdiff/pkg/apis/storage/v1alpha1"
 	clientset "github.com/ihcsim/controllers/snapdiff/pkg/generated/clientset/versioned"
 	informers "github.com/ihcsim/controllers/snapdiff/pkg/generated/informers/externalversions"
-	"github.com/ihcsim/controllers/snapdiff/pkg/initializer"
 	"github.com/pkg/errors"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apiserver/pkg/admission"
@@ -91,5 +92,9 @@ func (o *Options) Validate() error {
 }
 
 func (o *Options) Complete() error {
+	// register admission plugins
+	changedblock.Register(o.RecommendedOptions.Admission.Plugins)
+	o.RecommendedOptions.Admission.RecommendedPluginOrder = append(
+		o.RecommendedOptions.Admission.RecommendedPluginOrder, "ChangedBlocks")
 	return nil
 }

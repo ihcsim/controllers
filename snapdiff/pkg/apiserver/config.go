@@ -40,15 +40,13 @@ func (c CompletedConfig) New() (*Server, error) {
 		GenericAPIServer: gs,
 	}
 
+	v1alpha1Storage := map[string]rest.Storage{}
+	v1alpha1Storage["changedBlocks"] = registry.NewREST()
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(
 		storage.GroupName,
 		Scheme,
 		metav1.ParameterCodec,
 		Codecs)
-	v1alpha1Storage := map[string]rest.Storage{}
-	v1alpha1Storage["changedBlocks"] = registry.PanicOnErr(
-		registry.NewREST(Scheme, c.GenericConfig.RESTOptionsGetter),
-	)
 	apiGroupInfo.VersionedResourcesStorageMap["v1alpha1"] = v1alpha1Storage
 
 	if err := s.GenericAPIServer.InstallAPIGroup(&apiGroupInfo); err != nil {

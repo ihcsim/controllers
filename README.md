@@ -9,6 +9,8 @@ Package            | Description
 `crd/dynamic`      | Sample code on how to use the [`dynamic` client](https://pkg.go.dev/k8s.io/client-go/dynamic#Interface) and [`unstructured.Unstructured` package](https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1/unstructured#Unstructured) to create and list custom resources
 `crd/typed`        | Sample code on how to use the [`code-generator`](https://github.com/kubernetes/code-generator) to auto-generate the CRD clients, informers and helpers. To update these auto-generated code, run `make generate`
 `upgrade/kubelet`  | (WIP) Automate the upgrades of kubelets in a cluster
+`snapdiff`         | An aggregated API server that explores the implementation of an in-memory storage to store the custom resources, and the Kubernetes `LIST` pagination mechanism
+`cbt-aggapi`       | An aggregated API server that explores the implementation of the `rest.Connecter` interface, used to serve long list of entries without putting the Kubernetes API server and etcd in the data retrieval path
 
 The code in the `crd` package uses the
 [`envtest`](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/envtest)
